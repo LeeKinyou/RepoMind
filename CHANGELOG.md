@@ -11,6 +11,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 项目初始化
 - 完整文档体系搭建
 
+### Fixed
+- **Critical 修复**
+  - GraphStore 持久化：索引后序列化到磁盘，查询/ RCA 服务自动加载（C1）
+  - VectorStore SQL 注入：`delete()` 方法转义单引号（C2）
+  - config 整数解析：`_safe_int()` 防御非法环境变量（C3）
+  - RRF 融合公式：按 source 分组计算真实排名，替代 `int(1/score)` 近似（C4）
+
+- **High 修复**
+  - Windows 路径兼容：统一使用 `path_to_module()` + `PurePosixPath`（H1）
+  - SQLite 连接复用：`_get_conn()` 懒加载，避免每次操作开关连接（H2）
+  - TypeInference 集成：索引时自动调用推断引擎并存储结果（H3）
+  - import alias 提取：解析 `as` 关键字后的别名（H4）
+  - 向量维度参数化：`VectorStore` 支持 `embedding_dim` 配置（H5）
+
+- **Medium 修复**
+  - SymbolType 显式转换 + 回退（M1）
+  - 符号解析逻辑统一到 `SymbolResolver`（M2）
+  - docstring 三引号正确剥离（M3）
+  - DuckType 输出排序稳定（M4）
+  - BM25Index.build() 状态重置（M5）
+  - 增量索引事务内清理旧数据（M6）
+  - LIKE 通配符转义（M7）
+
+- **Low 修复**
+  - `import re` 移至文件顶部（L1）
+  - `VectorEntry.metadata` 使用 `Field(default_factory=dict)`（L2）
+  - `clear()` 使用 `frozenset` 白名单校验表名（L3）
+
+- **TDD 补充修复（第二轮审查）**
+  - GraphStore HMAC-SHA256 签名验证（C6）
+  - Parser import 精确提取，避免重复（H4 补充）
+  - Parser 函数体递归遍历，提取内部调用
+  - TypeInference `infer()` 参数名统一为 `name`
+  - `_strategy_self_inference` 行号偏移修正
+  - config `get()` 空字符串语义修复（H6）
+
+- **v2 审查修复（第三轮）**
+  - `_safe_symbol_type` 提取到 schemas.py 消除重复定义（H10）
+  - GraphStore.get_subgraph 使用 safe_symbol_type 转换类型（H11）
+  - 签名提取改用 body_node 精确切取，支持类型注解（H7）
+  - 返回类型解析改用正则，支持复杂泛型（H8）
+  - _extract_call 后继续递归，修复嵌套调用丢失（H13）
+  - IndexService 构建 symbol_index 传入 resolve_callee（C5）
+  - symbol_index 改为 dict[str, list[str]] 避免同名覆盖（M12）
+  - BM25 分词按 `_.\s` 分割，支持代码符号搜索（M13）
+  - VisualizationService._node_shape 改用 SymbolType 枚举（M14）
+  - CLI query 命令显示 answer 字段（M15）
+  - duck_typing 排除注释行和行内注释（M16）
+  - RCA _frame_to_qname 统一使用 path_to_module（M18）
+  - VectorStore._get_table 异常捕获收窄（L8）
+  - _collect_files fp.stat() 添加 TOCTOU 防御（L9）
+  - docstring 提取处理 f/r/b 前缀（L10）
+  - CLI rca 命令添加 trace_file 不存在检查（L11）
+  - jedi 延迟到 _strategy_jedi 方法内导入（L5）
+  - GraphStore 持久化从 pickle 迁移到 JSON（C6）
+  - relative_to 单独捕获 ValueError（M9）
+
+- **测试**
+  - 新增 12 个测试文件，138 个测试用例
+  - 覆盖全部公开 API（模型、存储、引擎、服务、CLI）
+  - 单元测试 + 集成测试
+  - ruff check 零错误
+
 ## [0.1.0] - 2026-06-20
 
 ### Added

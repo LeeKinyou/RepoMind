@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with this repository.
+This file provides guidance to Antigravity when working with this repository.
 
 ## Project Overview
 
@@ -54,7 +54,7 @@ uv run pytest
 
 ## Environment Variables
 
-所有系统级配置和密钥通过 `.env` 文件注入，**不要在代码或文档中硬编码密钥**。
+所有系统级配置 and 密钥通过 `.env` 文件注入，**不要在代码或文档中硬编码密钥**。
 
 `.env` 文件示例（从 `.env.example` 复制）：
 
@@ -185,7 +185,7 @@ src/repomind/
 ### 2. 设计假设必须考虑最坏情况
 
 - 键是否可能重复？→ `__init__`、`get`、`parse` 在大项目中随处可见，不能用短名作唯一键
-- 输入是否可能有噪声？→ 源码正则匹配必须排除注释和字符串
+- 输入是否可能有噪声？→ 源码正则匹配必须排除注释 and 字符串
 - 边界是否做了类型转换？→ NetworkX 存 `str`，Pydantic 要 `SymbolType`，必须在边界处显式转换
 
 ### 3. 字符串分割是脆弱的解析策略
@@ -220,4 +220,4 @@ BM25 为自然语言设计，用于代码搜索必须适配：
 - `pyproject.toml` — 项目元数据、依赖、构建配置
 - `.env.example` — 环境变量模板
 - `.ruff.toml` — Ruff 格式化和 Lint 配置
-- `CLAUDE.md` — 本文件，Claude Code 项目指引
+- `AGENTS.md` — 本文件，Antigravity 项目指引
