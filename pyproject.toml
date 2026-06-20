@@ -10,7 +10,6 @@ dependencies = [
     "tree-sitter>=0.21.0",
     "tree-sitter-python>=0.21.0",
     "networkx>=3.0",
-    "lancedb>=0.4.0",
     "litellm>=1.0.0",
     "rich>=13.0.0",
     "sqlite-vec>=0.1.0",
