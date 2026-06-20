@@ -29,7 +29,11 @@ class RCAService:
         sqlite: SQLiteStore | None = None,
         graph: GraphStore | None = None,
     ):
+        import logging
         from repomind.utils.config import load_config
+        from repomind.utils.errors import GraphLoadError
+
+        logger = logging.getLogger(__name__)
         if index_dir is None:
             index_dir = load_config().index_dir
         self.sqlite = sqlite or SQLiteStore(str(Path(index_dir) / "index.db"))
@@ -37,7 +41,10 @@ class RCAService:
         if graph is None:
             graph_path = Path(index_dir) / "graph.json"
             if graph_path.exists():
-                self.graph.load(str(graph_path))
+                try:
+                    self.graph.load(str(graph_path))
+                except GraphLoadError as e:
+                    logger.warning("Failed to load graph: %s. Starting with empty graph.", e)
 
     def analyze_trace(self, trace: str) -> RCAResult:
         """Parse stack trace and find root cause."""

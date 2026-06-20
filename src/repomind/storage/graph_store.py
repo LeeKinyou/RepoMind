@@ -103,15 +103,29 @@ class GraphStore:
 
     def load(self, path: str) -> None:
         """Load graph from disk, verifying HMAC signature and loading JSON."""
+        import os
+        if not os.path.exists(path):
+            return  # No graph file yet, start with empty graph
+
         with open(path, "rb") as f:
             sig_line = f.readline().strip()
             data = f.read()
-        expected = hmac_mod.new(b"repomind", data, hashlib.sha256).hexdigest()
-        if not hmac_mod.compare_digest(sig_line.decode(), expected):
-            raise GraphLoadError("Graph file signature mismatch - possible tampering")
+
+        if not data:
+            return  # Empty file
+
+        try:
+            expected = hmac_mod.new(b"repomind", data, hashlib.sha256).hexdigest()
+            if not hmac_mod.compare_digest(sig_line.decode(), expected):
+                raise GraphLoadError("Graph file signature mismatch - possible tampering")
+        except (ValueError, UnicodeDecodeError):
+            raise GraphLoadError("Invalid graph file format")
+
         try:
             graph_data = json.loads(data.decode("utf-8"))
             self.graph = nx.node_link_graph(graph_data)
+        except UnicodeDecodeError:
+            raise GraphLoadError("Graph file is not in JSON format (possibly legacy pickle format). Delete the file and re-index.")
         except Exception as e:
             raise GraphLoadError(f"Failed to parse graph JSON: {e}")
 
