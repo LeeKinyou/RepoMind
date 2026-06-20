@@ -61,17 +61,28 @@ class VectorStore:
         return results
 
     def delete(self, ids: list[str]) -> None:
+        import re
         table = self._get_table()
-        sanitized = [i.replace("'", "''") for i in ids]
-        id_list = ", ".join(f"'{s}'" for s in sanitized)
+        # Validate each ID to prevent SQL injection (must contain only alphanumeric, underscores, dots, slashes, dashes, colons, at-signs)
+        safe_pattern = re.compile(r"^[a-zA-Z0-9_./\-:@]+$")
+        for val in ids:
+            if not safe_pattern.match(val):
+                raise ValueError(f"Invalid ID format: {val!r}")
+        
+        if not ids:
+            return
+            
+        id_list = ", ".join(f"'{s}'" for s in ids)
         table.delete(f"id IN ({id_list})")
 
     def count(self) -> int:
         return self._get_table().count_rows()
 
     def clear(self) -> None:
+        import logging
+        logger = logging.getLogger(__name__)
         try:
             self.db.drop_table("embeddings")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Table 'embeddings' did not exist or could not be dropped: %s", e)
         self._table = None

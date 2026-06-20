@@ -136,6 +136,12 @@ class SQLiteStore:
             self._conn.close()
             self._conn = None
 
+    def __enter__(self) -> SQLiteStore:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
     @contextmanager
     def _connect(self) -> Generator[sqlite3.Connection, None, None]:
         conn = self._get_conn()
@@ -145,6 +151,11 @@ class SQLiteStore:
         except Exception:
             conn.rollback()
             raise
+
+    @contextmanager
+    def _read_connect(self) -> Generator[sqlite3.Connection, None, None]:
+        conn = self._get_conn()
+        yield conn
 
     # === File operations ===
 
@@ -156,11 +167,7 @@ class SQLiteStore:
             if existing:
                 if existing["hash"] == file_info.hash:
                     return existing["id"]
-                # Clean up old records before updating (calls has no CASCADE on file_id)
-                conn.execute("DELETE FROM calls WHERE caller_id IN (SELECT id FROM symbols WHERE file_id = ?)", (existing["id"],))
-                conn.execute("DELETE FROM calls WHERE callee_id IN (SELECT id FROM symbols WHERE file_id = ?)", (existing["id"],))
-                conn.execute("DELETE FROM inherits WHERE child_id IN (SELECT id FROM symbols WHERE file_id = ?)", (existing["id"],))
-                conn.execute("DELETE FROM type_info WHERE symbol_id IN (SELECT id FROM symbols WHERE file_id = ?)", (existing["id"],))
+                # Clean up old records before updating (relying on ON DELETE CASCADE)
                 conn.execute("DELETE FROM symbols WHERE file_id = ?", (existing["id"],))
                 conn.execute("DELETE FROM imports WHERE file_id = ?", (existing["id"],))
                 conn.execute(
@@ -175,7 +182,7 @@ class SQLiteStore:
             return cur.lastrowid
 
     def get_file_by_path(self, path: str) -> dict | None:
-        with self._connect() as conn:
+        with self._read_connect() as conn:
             row = conn.execute("SELECT * FROM files WHERE path = ?", (path,)).fetchone()
             return dict(row) if row else None
 
@@ -201,7 +208,7 @@ class SQLiteStore:
             return cur.lastrowid
 
     def get_symbol_by_qualified_name(self, qualified_name: str) -> dict | None:
-        with self._connect() as conn:
+        with self._read_connect() as conn:
             row = conn.execute(
                 "SELECT * FROM symbols WHERE qualified_name = ?", (qualified_name,)
             ).fetchone()
@@ -209,7 +216,7 @@ class SQLiteStore:
 
     def search_symbols(self, query: str, limit: int = 20) -> list[dict]:
         escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        with self._connect() as conn:
+        with self._read_connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM symbols WHERE name LIKE ? ESCAPE '\\' OR qualified_name LIKE ? ESCAPE '\\' LIMIT ?",
                 (f"%{escaped}%", f"%{escaped}%", limit),
@@ -217,7 +224,7 @@ class SQLiteStore:
             return [dict(r) for r in rows]
 
     def get_all_symbols(self) -> list[dict]:
-        with self._connect() as conn:
+        with self._read_connect() as conn:
             rows = conn.execute("SELECT * FROM symbols").fetchall()
             return [dict(r) for r in rows]
 
@@ -262,7 +269,7 @@ class SQLiteStore:
             return cur.lastrowid
 
     def get_callees(self, caller_qname: str) -> list[dict]:
-        with self._connect() as conn:
+        with self._read_connect() as conn:
             rows = conn.execute(
                 """SELECT s.*, c.call_type, c.confidence, c.line_number
                    FROM calls c JOIN symbols s ON c.callee_id = s.id
@@ -272,7 +279,7 @@ class SQLiteStore:
             return [dict(r) for r in rows]
 
     def get_callers(self, callee_qname: str) -> list[dict]:
-        with self._connect() as conn:
+        with self._read_connect() as conn:
             rows = conn.execute(
                 """SELECT s.*, c.call_type, c.confidence, c.line_number
                    FROM calls c JOIN symbols s ON c.caller_id = s.id
@@ -284,7 +291,7 @@ class SQLiteStore:
     # === Stats ===
 
     def get_stats(self) -> dict:
-        with self._connect() as conn:
+        with self._read_connect() as conn:
             files = conn.execute("SELECT COUNT(*) as cnt FROM files").fetchone()["cnt"]
             symbols = conn.execute("SELECT COUNT(*) as cnt FROM symbols").fetchone()["cnt"]
             classes = conn.execute("SELECT COUNT(*) as cnt FROM symbols WHERE type='class'").fetchone()["cnt"]

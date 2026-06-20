@@ -1,13 +1,14 @@
 """NetworkX in-memory graph storage for RepoMind."""
 from __future__ import annotations
 
-import pickle
+import json
 import hashlib
 import hmac as hmac_mod
 import networkx as nx
 from collections import deque
 
 from repomind.models.schemas import SymbolRelation, RelationType, SymbolInfo, CallGraphResult, safe_symbol_type
+from repomind.utils.errors import GraphLoadError
 
 
 class GraphStore:
@@ -81,7 +82,8 @@ class GraphStore:
             from networkx.algorithms.community import louvain_communities
             return list(louvain_communities(undirected))
         except ImportError:
-            return list(nx.connected_components(undirected))
+            from networkx.algorithms.community import greedy_modularity_communities
+            return [set(c) for c in greedy_modularity_communities(undirected)]
 
     def shortest_path(self, source: str, target: str) -> list[str] | None:
         try:
@@ -93,21 +95,25 @@ class GraphStore:
         self.graph.clear()
 
     def save(self, path: str) -> None:
-        """Serialize graph to disk with HMAC signature."""
-        data = pickle.dumps(self.graph)
+        """Serialize graph to disk with HMAC signature using JSON."""
+        data = json.dumps(nx.node_link_data(self.graph)).encode("utf-8")
         sig = hmac_mod.new(b"repomind", data, hashlib.sha256).hexdigest()
         with open(path, "wb") as f:
             f.write(sig.encode() + b"\n" + data)
 
     def load(self, path: str) -> None:
-        """Load graph from disk, verifying HMAC signature."""
+        """Load graph from disk, verifying HMAC signature and loading JSON."""
         with open(path, "rb") as f:
             sig_line = f.readline().strip()
             data = f.read()
         expected = hmac_mod.new(b"repomind", data, hashlib.sha256).hexdigest()
         if not hmac_mod.compare_digest(sig_line.decode(), expected):
-            raise ValueError("Graph file signature mismatch - possible tampering")
-        self.graph = pickle.loads(data)
+            raise GraphLoadError("Graph file signature mismatch - possible tampering")
+        try:
+            graph_data = json.loads(data.decode("utf-8"))
+            self.graph = nx.node_link_graph(graph_data)
+        except Exception as e:
+            raise GraphLoadError(f"Failed to parse graph JSON: {e}")
 
     @property
     def node_count(self) -> int:

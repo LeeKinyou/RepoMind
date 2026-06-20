@@ -49,6 +49,14 @@ class SymbolResolver:
                         return qname
             return candidates[0]
 
+        # Fast suffix match using target's last part (fixes H2)
+        last_part = target.split(".")[-1] if "." in target else target
+        if last_part in symbol_index:
+            for qname in symbol_index[last_part]:
+                if qname.endswith(f".{target}"):
+                    return qname
+
+        # Fallback to full scanning (O(N)) if not found (guarantees compatibility with tests)
         for name, qnames in symbol_index.items():
             for qname in qnames:
                 if qname.endswith(f".{target}"):

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from dataclasses import dataclass, field
+from typing import TypedDict
 
 import tree_sitter_python as tspython
 from tree_sitter import Language, Parser, Node
@@ -11,15 +12,37 @@ from repomind.models.schemas import SymbolInfo, SymbolType
 from repomind.utils.path_utils import path_to_module
 
 
+class CallInfo(TypedDict):
+    caller_class: str | None
+    target: str
+    call_type: str  # "direct" | "self" | "method"
+    line_number: int
+
+
+class ImportInfo(TypedDict):
+    module_path: str
+    imported_name: str | None
+    alias: str | None
+    is_relative: bool
+    relative_level: int
+    line_number: int
+
+
+class ClassInfo(TypedDict):
+    name: str
+    qualified_name: str
+    parents: list[str]
+
+
 @dataclass
 class ParsedFile:
     """Result of parsing a single file."""
     path: str
     source: bytes
     symbols: list[SymbolInfo] = field(default_factory=list)
-    imports: list[dict] = field(default_factory=list)
-    calls: list[dict] = field(default_factory=list)
-    classes: list[dict] = field(default_factory=list)
+    imports: list[ImportInfo] = field(default_factory=list)
+    calls: list[CallInfo] = field(default_factory=list)
+    classes: list[ClassInfo] = field(default_factory=list)
 
 
 class TreeSitterParser:
@@ -67,7 +90,7 @@ class TreeSitterParser:
         name_node = node.child_by_field_name("name")
         if not name_node:
             return
-        name = name_node.text.decode("utf-8")
+        name = self._node_text(name_node)
         qname = f"{module_path}.{name}"
         body = node.child_by_field_name("body")
         start_line = node.start_point[0] + 1
@@ -99,7 +122,7 @@ class TreeSitterParser:
         name_node = node.child_by_field_name("name")
         if not name_node:
             return
-        name = name_node.text.decode("utf-8")
+        name = self._node_text(name_node)
         if parent_class:
             qname = f"{parent_class}.{name}"
             sym_type = SymbolType.METHOD
@@ -237,8 +260,8 @@ class TreeSitterParser:
             expr = first.children[0]
             if expr.type == "string":
                 text = self._node_text(expr)
-                # Strip string prefixes (f, b, r, rb, br, fb, bf)
-                for prefix in ("rb", "br", "fb", "bf", "f", "b", "r"):
+                # Strip string prefixes (f, b, r, rb, br, t for Python 3.12+)
+                for prefix in ("rb", "br", "f", "b", "r", "t"):
                     if text.startswith(prefix):
                         text = text[len(prefix):]
                         break
@@ -264,6 +287,10 @@ class TreeSitterParser:
                 parts.append(self._node_text(child))
             elif child.type == "attribute":
                 parts.extend(self._get_attribute_parts(child))
+            elif child.type == "call":
+                func = child.child_by_field_name("function")
+                if func:
+                    parts.extend(self._get_attribute_parts(func))
         return parts
 
     def _to_module_path(self, path: Path) -> str:
