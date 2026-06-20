@@ -208,3 +208,12 @@ class TestConnectionReuse:
         _ = sqlite_store._get_conn()
         sqlite_store.close()
         assert sqlite_store._conn is None
+
+
+class TestContextManager:
+    def test_context_manager(self, tmp_dir):
+        db_path = str(tmp_dir / "test_context.db")
+        from repomind.storage.sqlite_store import SQLiteStore
+        with SQLiteStore(db_path) as store:
+            assert store._conn is not None  # Connection initialized by _init_db
+        assert store._conn is None  # Should be closed by __exit__

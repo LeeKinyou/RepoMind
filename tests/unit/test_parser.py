@@ -114,3 +114,12 @@ class TestSignatureExtraction:
         sym = result.symbols[0]
         sig = sym.signature or ""
         assert "def foo" in sig
+
+
+class TestChainCalls:
+    def test_chain_calls(self, parser):
+        code = "a.b.c().d()"
+        result = parser.parse_source(code)
+        targets = [c["target"] for c in result.calls]
+        assert "a.b.c" in targets
+        assert "a.b.c.d" in targets

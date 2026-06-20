@@ -13,13 +13,19 @@ class TestSymbolType:
         assert SymbolType.CLASS == "class"
         assert SymbolType.FUNCTION == "function"
         assert SymbolType.METHOD == "method"
+        assert SymbolType.VARIABLE == "variable"
 
     def test_from_string(self):
         assert SymbolType("class") == SymbolType.CLASS
 
     def test_invalid_value_raises(self):
         with pytest.raises(ValueError):
-            SymbolType("variable")
+            SymbolType("invalid_type")
+
+    def test_safe_symbol_type(self):
+        from repomind.models.schemas import safe_symbol_type
+        assert safe_symbol_type("class") == SymbolType.CLASS
+        assert safe_symbol_type("unknown_type") == SymbolType.FUNCTION
 
 
 class TestRelationType:

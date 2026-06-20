@@ -66,3 +66,33 @@ class TestCallGraphBuilder:
         builder.build([pf])
         assert "foo" in builder._symbol_index
         assert "pkg.mod.foo" in builder._symbol_index["foo"]
+
+    def test_build_import_and_inheritance_edges(self, builder):
+        pf1 = ParsedFile(
+            path="other.py",
+            source=b"class Parent:\n    pass\ndef helper():\n    pass\n",
+            symbols=[
+                SymbolInfo(name="Parent", qualified_name="other.Parent",
+                           type=SymbolType.CLASS, file_path="other.py",
+                           start_line=1, end_line=2),
+                SymbolInfo(name="helper", qualified_name="other.helper",
+                           type=SymbolType.FUNCTION, file_path="other.py",
+                           start_line=3, end_line=4),
+            ],
+            imports=[], calls=[], classes=[],
+        )
+        pf2 = ParsedFile(
+            path="mod.py",
+            source=b"from other import helper\nclass Child(Parent):\n    pass\n",
+            symbols=[
+                SymbolInfo(name="Child", qualified_name="mod.Child",
+                           type=SymbolType.CLASS, file_path="mod.py",
+                           start_line=2, end_line=3),
+            ],
+            imports=[{"module_path": "other", "imported_name": "helper", "alias": None, "is_relative": False, "relative_level": 0, "line_number": 1}],
+            calls=[],
+            classes=[{"name": "Child", "qualified_name": "mod.Child", "parents": ["Parent"], "line_number": 2}],
+        )
+        graph = builder.build([pf1, pf2])
+        # check imports edge and inherits edge
+        assert graph.edge_count >= 2

@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 from repomind.storage.graph_store import GraphStore
 from repomind.models.schemas import SymbolRelation, RelationType
+from repomind.utils.errors import GraphLoadError
 
 
 class TestGraphStoreBasics:
@@ -114,7 +115,7 @@ class TestPersistence:
             f.write(content[:-5] + b"XXXXX")
 
         new_store = GraphStore()
-        with pytest.raises(ValueError, match="signature mismatch"):
+        with pytest.raises(GraphLoadError, match="signature mismatch"):
             new_store.load(path)
 
     def test_clear(self, graph_store):
