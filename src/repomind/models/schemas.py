@@ -8,10 +8,19 @@ from pydantic import BaseModel, Field
 
 # === 枚举类型 ===
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 class SymbolType(str, Enum):
     CLASS = "class"
     FUNCTION = "function"
     METHOD = "method"
+    VARIABLE = "variable"
+    MODULE = "module"
+    INTERFACE = "interface"
+    ENUM = "enum"
+    PROPERTY = "property"
 
 
 class RelationType(str, Enum):
@@ -23,10 +32,11 @@ class RelationType(str, Enum):
 
 
 def safe_symbol_type(raw: str) -> SymbolType:
-    """Safely convert string to SymbolType, falling back to FUNCTION."""
+    """Safely convert string to SymbolType, warning and falling back to FUNCTION on error."""
     try:
         return SymbolType(raw)
     except ValueError:
+        logger.warning("Unknown symbol type '%s', falling back to FUNCTION", raw)
         return SymbolType.FUNCTION
 
 
@@ -52,7 +62,7 @@ class SymbolRelation(BaseModel):
     target: str  # qualified_name
     relation_type: RelationType
     line_number: int | None = None
-    weight: float = 1.0
+    weight: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
 # === 索引模型 ===
@@ -99,7 +109,7 @@ class QueryResult(BaseModel):
     answer: str
     symbols: list[SymbolInfo] = Field(default_factory=list)
     relations: list[SymbolRelation] = Field(default_factory=list)
-    confidence: float = 0.0
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     sources: list[str] = Field(default_factory=list)
     elapsed_seconds: float = 0.0
 
@@ -109,7 +119,7 @@ class QueryResult(BaseModel):
 class RCAResult(BaseModel):
     """根因分析结果"""
     root_cause: str
-    confidence: float
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     affected_symbols: list[SymbolInfo] = Field(default_factory=list)
     call_chain: list[str] = Field(default_factory=list)
     explanation: str = ""
@@ -123,7 +133,7 @@ class FixResult(BaseModel):
     original_code: str
     suggested_code: str
     explanation: str
-    confidence: float
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 # === 图模型 ===

@@ -181,53 +181,8 @@ def show(
 ):
     """查看符号详情"""
     proj = Path(project).resolve()
-    idx = _ensure_index(proj)
-
-    from repomind.services.query_service import QueryService
-
-    service = QueryService(index_dir=str(idx))
-    result = service.search(name, __import__("repomind.models.schemas", fromlist=["QueryOptions"]).QueryOptions(max_results=1))
-
-    if not result.symbols:
-        console.print(f"[yellow]Symbol not found:[/] {name}")
-        return
-
-    sym = result.symbols[0]
-    qname = _strip_project_prefix(sym.qualified_name, proj)
-
-    # Info panel
-    info = Table(box=box.SIMPLE, show_header=False, padding=(0, 1))
-    info.add_column(style="cyan", min_width=12)
-    info.add_column()
-    info.add_row("Name", sym.name)
-    info.add_row("Type", sym.type.value)
-    info.add_row("Qualified", qname)
-    info.add_row("File", f"{sym.file_path}:{sym.start_line}-{sym.end_line}")
-    if sym.signature:
-        info.add_row("Signature", sym.signature)
-    if sym.docstring:
-        info.add_row("Docstring", sym.docstring.split("\n")[0])
-
-    console.print(Panel(info, title=f"[bold]{sym.name}[/]", border_style="cyan"))
-
-    # Code
-    if Path(sym.file_path).exists():
-        console.print("\n[bold]Source:[/]")
-        _display_code_snippet(sym.file_path, sym.start_line, context=10)
-
-    # Callers
-    callers = service.get_callers(sym.qualified_name)
-    if callers:
-        console.print(f"\n[bold]Called by ({len(callers)}):[/]")
-        for c in callers[:10]:
-            console.print(f"  [dim]<-[/] {c.get('name', '?')} [dim]({c.get('type', '?')})[/]")
-
-    # Callees
-    callees = service.get_callees(sym.qualified_name)
-    if callees:
-        console.print(f"\n[bold]Calls ({len(callees)}):[/]")
-        for c in callees[:10]:
-            console.print(f"  [dim]->[/] {c.get('name', '?')} [dim]({c.get('type', '?')})[/]")
+    _ensure_index(proj)
+    _do_show(name, proj)
 
 
 @app.command()
@@ -236,58 +191,36 @@ def rca(
     project: str = typer.Option(".", "--project", "-p", help="项目目录"),
 ):
     """根因分析 — 分析 stack trace"""
-    from repomind.services.rca_service import RCAService
-
     proj = Path(project).resolve()
-    idx = _ensure_index(proj)
-
     if trace_file:
         p = Path(trace_file)
         if not p.exists():
             console.print(f"[bold red]File not found:[/] {trace_file}")
             raise typer.Exit(code=1)
         trace = p.read_text(encoding="utf-8")
+        idx = _ensure_index(proj)
+        from repomind.services.rca_service import RCAService
+        service = RCAService(index_dir=str(idx))
+        with console.status("[bold red]Analyzing..."):
+            result = service.analyze_trace(trace)
+
+        # Root cause
+        console.print(Panel(
+            f"[bold]{result.root_cause}[/]",
+            title="[bold red]Root Cause[/]",
+            border_style="red",
+        ))
+
+        console.print(f"[bold]Confidence:[/] {result.confidence:.0%}")
+        console.print(f"\n{result.explanation}")
+
+        if result.call_chain:
+            console.print("\n[bold]Call Chain:[/]")
+            for i, frame in enumerate(result.call_chain):
+                prefix = "[red]![/]" if i == len(result.call_chain) - 1 else "[dim]->[/]"
+                console.print(f"  {prefix} {frame}")
     else:
-        console.print("[yellow]Paste stack trace below (press Enter twice to finish):[/]")
-        lines = []
-        empty_count = 0
-        while True:
-            try:
-                line = input()
-                if line.strip() == "":
-                    empty_count += 1
-                    if empty_count >= 2:
-                        break
-                else:
-                    empty_count = 0
-                lines.append(line)
-            except EOFError:
-                break
-        trace = "\n".join(lines)
-
-    if not trace.strip():
-        console.print("[red]No trace provided.[/]")
-        return
-
-    service = RCAService(index_dir=str(idx))
-    with console.status("[bold red]Analyzing..."):
-        result = service.analyze_trace(trace)
-
-    # Root cause
-    console.print(Panel(
-        f"[bold]{result.root_cause}[/]",
-        title="[bold red]Root Cause[/]",
-        border_style="red",
-    ))
-
-    console.print(f"[bold]Confidence:[/] {result.confidence:.0%}")
-    console.print(f"\n{result.explanation}")
-
-    if result.call_chain:
-        console.print("\n[bold]Call Chain:[/]")
-        for i, frame in enumerate(result.call_chain):
-            prefix = "[red]![/]" if i == len(result.call_chain) - 1 else "[dim]->[/]"
-            console.print(f"  {prefix} {frame}")
+        _do_rca_interactive(proj)
 
 
 @app.command()
@@ -295,23 +228,8 @@ def stats(
     project: str = typer.Option(".", "--project", "-p", help="项目目录"),
 ):
     """显示索引统计"""
-    from repomind.services.index_service import IndexService
-
     proj = Path(project).resolve()
-    idx = _index_dir(proj)
-    if not (idx / "index.db").exists():
-        console.print("[yellow]No index found. Run [bold]repomind index[/] first.[/]")
-        return
-
-    service = IndexService(index_dir=str(idx))
-    data = service.get_stats()
-
-    table = Table(box=box.ROUNDED, title="Index Stats", show_header=False, padding=(0, 2))
-    table.add_column(style="cyan", min_width=12)
-    table.add_column(style="bold white")
-    for key, val in data.items():
-        table.add_row(key, str(val))
-    console.print(table)
+    _do_stats(proj)
 
 
 @app.command()
@@ -335,38 +253,8 @@ def graph(
 ):
     """查看符号调用图"""
     proj = Path(project).resolve()
-    idx = _ensure_index(proj)
-
-    from repomind.services.query_service import QueryService
-
-    service = QueryService(index_dir=str(idx))
-    # Find the symbol first
-    result = service.search(name, __import__("repomind.models.schemas", fromlist=["QueryOptions"]).QueryOptions(max_results=1))
-    if not result.symbols:
-        console.print(f"[yellow]Symbol not found:[/] {name}")
-        return
-
-    sym = result.symbols[0]
-    graph_result = service.get_call_graph(sym.qualified_name, depth=depth)
-
-    if not graph_result.nodes:
-        console.print(f"[yellow]No call graph for:[/] {sym.name}")
-        return
-
-    console.print(f"\n[bold]Call Graph for {sym.name}[/] [dim](depth={depth})[/]\n")
-
-    for node in graph_result.nodes:
-        qname = _strip_project_prefix(node.qualified_name, proj)
-        type_colors = {"class": "cyan", "function": "green", "method": "yellow"}
-        color = type_colors.get(node.type.value, "white")
-        console.print(f"  [{color}]{node.name}[/] [dim]({node.type.value})[/] [dim]{qname}[/]")
-
-    if graph_result.edges:
-        console.print(f"\n[dim]{len(graph_result.edges)} edges:[/]")
-        for edge in graph_result.edges[:20]:
-            src = _strip_project_prefix(edge.source, proj).split(".")[-1]
-            tgt = _strip_project_prefix(edge.target, proj).split(".")[-1]
-            console.print(f"  [dim]{src} -> {tgt} ({edge.relation_type.value})[/]")
+    _ensure_index(proj)
+    _do_graph(name, proj, depth)
 
 
 @app.command()
@@ -688,13 +576,16 @@ def _do_rca_interactive(project: Path):
 # ── Entry ────────────────────────────────────────────────────────────────
 
 
-def main():
-    """Entry point — if no args, enter interactive mode."""
-    if len(sys.argv) == 1:
+@app.callback(invoke_without_command=True)
+def main_callback(ctx: typer.Context):
+    """Repository Intelligence Platform — 代码仓库智能分析"""
+    if ctx.invoked_subcommand is None:
         project = _find_project_root()
         _interactive_mode(project)
-    else:
-        app()
+
+
+def main():
+    app()
 
 
 if __name__ == "__main__":

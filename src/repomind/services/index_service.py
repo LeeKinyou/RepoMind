@@ -16,14 +16,25 @@ from repomind.storage.graph_store import GraphStore
 class IndexService:
     """Orchestrates code indexing: parse -> infer -> build graph -> store."""
 
-    def __init__(self, index_dir: str = ".repomind"):
+    def __init__(
+        self,
+        index_dir: str | None = None,
+        parser: TreeSitterParser | None = None,
+        type_engine: TypeInferenceEngine | None = None,
+        sqlite: SQLiteStore | None = None,
+        graph: GraphStore | None = None,
+        call_graph_builder: CallGraphBuilder | None = None,
+    ):
+        from repomind.utils.config import load_config
+        if index_dir is None:
+            index_dir = load_config().index_dir
         self.index_dir = Path(index_dir)
         self.index_dir.mkdir(parents=True, exist_ok=True)
-        self.parser = TreeSitterParser()
-        self.type_engine = TypeInferenceEngine()
-        self.sqlite = SQLiteStore(str(self.index_dir / "index.db"))
-        self.graph = GraphStore()
-        self.call_graph_builder = CallGraphBuilder(self.graph)
+        self.parser = parser or TreeSitterParser()
+        self.type_engine = type_engine or TypeInferenceEngine()
+        self.sqlite = sqlite or SQLiteStore(str(self.index_dir / "index.db"))
+        self.graph = graph or GraphStore()
+        self.call_graph_builder = call_graph_builder or CallGraphBuilder(self.graph)
 
     def index_directory(self, path: str, options: IndexOptions | None = None) -> IndexResult:
         """Index all Python files in a directory."""
@@ -35,11 +46,50 @@ class IndexService:
         if not project_path.exists():
             return IndexResult(success=False, errors=[f"Path not found: {path}"])
 
-        # Collect Python files
+        # 1. Collect files
         py_files = self._collect_files(project_path, options)
         total_files = len(py_files)
 
-        # Parse all files
+        # 2. Parse files
+        parsed_files, skipped = self._parse_files(py_files, errors)
+
+        # 3. Store files and symbols (includes type inference)
+        total_symbols, total_classes, total_functions = self._store_symbols_and_metadata(
+            parsed_files, project_path, errors
+        )
+
+        # 4. Build and store call graph
+        total_calls = self._build_and_store_call_graph(parsed_files, errors)
+
+        # 5. Store inheritance relations
+        self._store_inheritance(parsed_files, errors)
+
+        # 6. Persist call graph
+        try:
+            self.graph.save(str(self.index_dir / "graph.json"))
+        except Exception as e:
+            errors.append(f"Failed to save call graph: {e}")
+
+        elapsed = time.time() - start_time
+        indexed = total_files - skipped
+        total_imports = sum(len(pf.imports) for pf in parsed_files)
+
+        return IndexResult(
+            success=True,
+            total_files=total_files,
+            indexed_files=indexed,
+            skipped_files=skipped,
+            total_symbols=total_symbols,
+            total_classes=total_classes,
+            total_functions=total_functions,
+            total_imports=total_imports,
+            total_calls=total_calls,
+            elapsed_seconds=round(elapsed, 2),
+            index_path=str(self.index_dir),
+            errors=errors,
+        )
+
+    def _parse_files(self, py_files: list[Path], errors: list[str]) -> tuple[list[ParsedFile], int]:
         parsed_files = []
         skipped = 0
         for fp in py_files:
@@ -49,11 +99,16 @@ class IndexService:
             except Exception as e:
                 errors.append(f"Failed to parse {fp}: {e}")
                 skipped += 1
+        return parsed_files, skipped
 
-        # Store files and symbols
+    def _store_symbols_and_metadata(
+        self, parsed_files: list[ParsedFile], project_path: Path, errors: list[str]
+    ) -> tuple[int, int, int]:
         total_symbols = 0
         total_classes = 0
         total_functions = 0
+        from repomind.models.schemas import SymbolType
+        
         for pf in parsed_files:
             try:
                 try:
@@ -83,7 +138,7 @@ class IndexService:
                             strategy=inferred.strategy,
                         )
                     total_symbols += 1
-                    if sym.type.value == "class":
+                    if sym.type == SymbolType.CLASS:
                         total_classes += 1
                     else:
                         total_functions += 1
@@ -100,57 +155,41 @@ class IndexService:
                     )
             except Exception as e:
                 errors.append(f"Failed to store {pf.path}: {e}")
+        return total_symbols, total_classes, total_functions
 
-        # Build call graph
-        self.call_graph_builder.build(parsed_files)
-
-        # Build symbol index for callee resolution
-        symbol_index: dict[str, list[str]] = {}
-        for pf in parsed_files:
-            for sym in pf.symbols:
-                symbol_index.setdefault(sym.name, []).append(sym.qualified_name)
-
-        # Store call relations in SQLite
+    def _build_and_store_call_graph(self, parsed_files: list[ParsedFile], errors: list[str]) -> int:
         total_calls = 0
-        total_imports = sum(len(pf.imports) for pf in parsed_files)
-        for pf in parsed_files:
-            for call in pf.calls:
-                caller_qname = SymbolResolver.resolve_caller(call, pf.path)
-                callee_qname = SymbolResolver.resolve_callee(call, call.get("caller_class"), symbol_index)
-                if caller_qname and callee_qname:
-                    self.sqlite.insert_call(
-                        caller_qname, callee_qname,
-                        call.get("call_type", "direct"),
-                        call.get("line_number"),
-                    )
-                    total_calls += 1
+        try:
+            self.call_graph_builder.build(parsed_files)
 
-        # Store inheritance
+            symbol_index: dict[str, list[str]] = {}
+            for pf in parsed_files:
+                for sym in pf.symbols:
+                    symbol_index.setdefault(sym.name, []).append(sym.qualified_name)
+
+            for pf in parsed_files:
+                for call in pf.calls:
+                    caller_qname = SymbolResolver.resolve_caller(call, pf.path)
+                    callee_qname = SymbolResolver.resolve_callee(call, call.get("caller_class"), symbol_index)
+                    if caller_qname and callee_qname:
+                        self.sqlite.insert_call(
+                            caller_qname, callee_qname,
+                            call.get("call_type", "direct"),
+                            call.get("line_number"),
+                        )
+                        total_calls += 1
+        except Exception as e:
+            errors.append(f"Failed to build call graph: {e}")
+        return total_calls
+
+    def _store_inheritance(self, parsed_files: list[ParsedFile], errors: list[str]) -> None:
         for pf in parsed_files:
             for cls in pf.classes:
                 for parent in cls.get("parents", []):
-                    self.sqlite.insert_inherit(cls["qualified_name"], parent)
-
-        # Persist the call graph to disk
-        self.graph.save(str(self.index_dir / "graph.json"))
-
-        elapsed = time.time() - start_time
-        indexed = total_files - skipped
-
-        return IndexResult(
-            success=True,
-            total_files=total_files,
-            indexed_files=indexed,
-            skipped_files=skipped,
-            total_symbols=total_symbols,
-            total_classes=total_classes,
-            total_functions=total_functions,
-            total_imports=total_imports,
-            total_calls=total_calls,
-            elapsed_seconds=round(elapsed, 2),
-            index_path=str(self.index_dir),
-            errors=errors,
-        )
+                    try:
+                        self.sqlite.insert_inherit(cls["qualified_name"], parent)
+                    except Exception as e:
+                        errors.append(f"Failed to store inheritance for {cls['qualified_name']}: {e}")
 
     def get_stats(self) -> dict:
         """Get index statistics."""
@@ -183,7 +222,6 @@ class IndexService:
                 if fp.stat().st_size > options.max_file_size_mb * 1024 * 1024:
                     continue
             except OSError:
-                continue
                 continue
             files.append(fp)
         return sorted(files)

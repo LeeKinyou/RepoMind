@@ -23,12 +23,21 @@ class CallFrame:
 class RCAService:
     """Root cause analysis from error traces."""
 
-    def __init__(self, index_dir: str = ".repomind"):
-        self.sqlite = SQLiteStore(f"{index_dir}/index.db")
-        self.graph = GraphStore()
-        graph_path = Path(index_dir) / "graph.json"
-        if graph_path.exists():
-            self.graph.load(str(graph_path))
+    def __init__(
+        self,
+        index_dir: str | None = None,
+        sqlite: SQLiteStore | None = None,
+        graph: GraphStore | None = None,
+    ):
+        from repomind.utils.config import load_config
+        if index_dir is None:
+            index_dir = load_config().index_dir
+        self.sqlite = sqlite or SQLiteStore(str(Path(index_dir) / "index.db"))
+        self.graph = graph or GraphStore()
+        if graph is None:
+            graph_path = Path(index_dir) / "graph.json"
+            if graph_path.exists():
+                self.graph.load(str(graph_path))
 
     def analyze_trace(self, trace: str) -> RCAResult:
         """Parse stack trace and find root cause."""

@@ -12,40 +12,60 @@ from repomind.core.retrieval.hybrid_retriever import HybridRetriever
 class QueryService:
     """Handles hybrid search, symbol info, and call graph queries."""
 
-    def __init__(self, index_dir: str = ".repomind"):
-        self.sqlite = SQLiteStore(f"{index_dir}/index.db")
-        self.graph = GraphStore()
-        graph_path = Path(index_dir) / "graph.json"
-        if graph_path.exists():
-            self.graph.load(str(graph_path))
-        self.retriever = HybridRetriever(self.sqlite, self.graph)
+    def __init__(
+        self,
+        index_dir: str | None = None,
+        sqlite: SQLiteStore | None = None,
+        graph: GraphStore | None = None,
+        retriever: HybridRetriever | None = None,
+    ):
+        from repomind.utils.config import load_config
+        if index_dir is None:
+            index_dir = load_config().index_dir
+        self.sqlite = sqlite or SQLiteStore(str(Path(index_dir) / "index.db"))
+        self.graph = graph or GraphStore()
+        if graph is None:
+            graph_path = Path(index_dir) / "graph.json"
+            if graph_path.exists():
+                self.graph.load(str(graph_path))
+        self.retriever = retriever or HybridRetriever(self.sqlite, self.graph)
+
+    def _dict_to_symbol_info(self, sym_dict: dict) -> SymbolInfo:
+        return SymbolInfo(
+            name=sym_dict.get("name", ""),
+            qualified_name=sym_dict.get("qualified_name", ""),
+            type=safe_symbol_type(sym_dict.get("type", "function")),
+            file_path=sym_dict.get("file_path", ""),
+            start_line=sym_dict.get("start_line", 0),
+            end_line=sym_dict.get("end_line", 0),
+            docstring=sym_dict.get("docstring"),
+            signature=sym_dict.get("signature"),
+        )
 
     def search(self, query: str, options: QueryOptions | None = None) -> QueryResult:
         """Execute hybrid retrieval query."""
         import time
+        import logging
+        from repomind.utils.errors import QueryError
+
+        logger = logging.getLogger(__name__)
         start = time.time()
         options = options or QueryOptions()
 
-        results = self.retriever.retrieve(
-            query,
-            top_k=options.max_results,
-            expand_hops=options.graph_hops,
-        )
+        try:
+            results = self.retriever.retrieve(
+                query,
+                top_k=options.max_results,
+                expand_hops=options.graph_hops,
+            )
+        except Exception as e:
+            logger.error("Search failed for query '%s': %s", query, e)
+            raise QueryError(f"Search failed: {e}") from e
 
         symbols = []
         sources = []
         for r in results:
-            sym_dict = r.symbol
-            symbols.append(SymbolInfo(
-                name=sym_dict.get("name", ""),
-                qualified_name=sym_dict.get("qualified_name", ""),
-                type=safe_symbol_type(sym_dict.get("type", "function")),
-                file_path=sym_dict.get("file_path", ""),
-                start_line=sym_dict.get("start_line", 0),
-                end_line=sym_dict.get("end_line", 0),
-                docstring=sym_dict.get("docstring"),
-                signature=sym_dict.get("signature"),
-            ))
+            symbols.append(self._dict_to_symbol_info(r.symbol))
             sources.append(r.source)
 
         elapsed = time.time() - start
@@ -62,16 +82,7 @@ class QueryService:
         sym = self.sqlite.get_symbol_by_qualified_name(qualified_name)
         if not sym:
             return None
-        return SymbolInfo(
-            name=sym.get("name", ""),
-            qualified_name=sym.get("qualified_name", ""),
-            type=safe_symbol_type(sym.get("type", "function")),
-            file_path=sym.get("file_path", ""),
-            start_line=sym.get("start_line", 0),
-            end_line=sym.get("end_line", 0),
-            docstring=sym.get("docstring"),
-            signature=sym.get("signature"),
-        )
+        return self._dict_to_symbol_info(sym)
 
     def get_call_graph(self, qualified_name: str, depth: int = 2) -> CallGraphResult:
         """Get call graph for a symbol."""
