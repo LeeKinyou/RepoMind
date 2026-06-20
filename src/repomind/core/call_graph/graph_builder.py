@@ -1,7 +1,7 @@
 """Call graph builder for RepoMind."""
 from __future__ import annotations
 
-from repomind.core.parser.tree_sitter_parser import ParsedFile
+from repomind.core.parser.tree_sitter_parser import ParsedFile, ImportInfo, CallInfo
 from repomind.storage.graph_store import GraphStore
 from repomind.models.schemas import SymbolRelation, RelationType
 from repomind.core.call_graph.resolver import SymbolResolver
@@ -65,7 +65,7 @@ class CallGraphBuilder:
                                         break
                             else:
                                 parent_qname = parent_candidates[0]
-                                
+
                     self.graph.add_relation(SymbolRelation(
                         source=cls["qualified_name"],
                         target=parent_qname,
@@ -88,7 +88,7 @@ class CallGraphBuilder:
 
         return self.graph
 
-    def _resolve_import(self, imp: dict) -> str | None:
+    def _resolve_import(self, imp: ImportInfo) -> str | None:
         module = imp.get("module_path", "")
         name = imp.get("imported_name")
         if name:

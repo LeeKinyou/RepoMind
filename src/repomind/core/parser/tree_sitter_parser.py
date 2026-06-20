@@ -32,6 +32,7 @@ class ClassInfo(TypedDict):
     name: str
     qualified_name: str
     parents: list[str]
+    line_number: int
 
 
 @dataclass
@@ -103,7 +104,7 @@ class TreeSitterParser:
         if bases:
             for base in bases.children:
                 if base.type == "identifier":
-                    parent_names.append(base.text.decode("utf-8"))
+                    parent_names.append(self._node_text(base))
                 elif base.type == "attribute":
                     parent_names.append(self._get_attribute_text(base))
 
@@ -112,7 +113,7 @@ class TreeSitterParser:
             file_path=pf.path, start_line=start_line, end_line=end_line,
             docstring=docstring,
         ))
-        pf.classes.append({"name": name, "qualified_name": qname, "parents": parent_names})
+        pf.classes.append({"name": name, "qualified_name": qname, "parents": parent_names, "line_number": start_line})
 
         # Walk class body for methods
         if body:

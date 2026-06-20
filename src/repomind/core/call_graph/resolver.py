@@ -1,6 +1,8 @@
 """Shared symbol resolution logic for RepoMind."""
 from __future__ import annotations
 
+from typing import Any, Mapping
+
 from repomind.utils.path_utils import path_to_module
 
 
@@ -8,7 +10,7 @@ class SymbolResolver:
     """Unified symbol name resolution for caller/callee lookups."""
 
     @staticmethod
-    def resolve_caller(call: dict, file_path: str) -> str | None:
+    def resolve_caller(call: Mapping[str, Any], file_path: str) -> str | None:
         """Resolve caller qualified name from a call dict and file path.
 
         Args:
@@ -23,7 +25,7 @@ class SymbolResolver:
         return path_to_module(file_path)
 
     @staticmethod
-    def resolve_callee(call: dict, caller_class: str | None, symbol_index: dict[str, list[str]]) -> str | None:
+    def resolve_callee(call: Mapping[str, Any], caller_class: str | None, symbol_index: dict[str, list[str]]) -> str | None:
         """Resolve callee qualified name from a call dict.
 
         Args:

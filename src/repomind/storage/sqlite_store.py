@@ -179,6 +179,7 @@ class SQLiteStore:
                 "INSERT INTO files (path, hash, language, line_count, size_bytes) VALUES (?, ?, ?, ?, ?)",
                 (file_info.path, file_info.hash, file_info.language, file_info.line_count, file_info.size_bytes),
             )
+            assert cur.lastrowid is not None
             return cur.lastrowid
 
     def get_file_by_path(self, path: str) -> dict | None:
@@ -205,6 +206,7 @@ class SQLiteStore:
                  symbol.start_line, symbol.end_line, symbol.docstring, symbol.signature,
                  symbol.is_exported, parent_id),
             )
+            assert cur.lastrowid is not None
             return cur.lastrowid
 
     def get_symbol_by_qualified_name(self, qualified_name: str) -> dict | None:
@@ -266,6 +268,7 @@ class SQLiteStore:
                 "INSERT INTO type_info (symbol_id, parameter_name, type_annotation, inferred_type, confidence, inference_strategy, evidence) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (symbol_id, parameter_name, type_annotation, inferred_type, confidence, strategy, evidence),
             )
+            assert cur.lastrowid is not None
             return cur.lastrowid
 
     def get_callees(self, caller_qname: str) -> list[dict]:

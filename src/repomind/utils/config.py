@@ -44,8 +44,9 @@ def load_config(env_file: str | None = None) -> AppConfig:
 
     def get(key: str, default: str = "") -> str:
         if key in values:
-            return values[key] if values[key] is not None else ""
-        return os.environ.get(key, default)
+            val = values[key]
+            return val if val is not None else ""
+        return os.environ.get(key, default) or default
 
     return AppConfig(
         llm=LLMConfig(

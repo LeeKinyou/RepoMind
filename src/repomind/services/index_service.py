@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 from repomind.models.schemas import IndexOptions, IndexResult, FileInfo
-from repomind.core.parser.tree_sitter_parser import TreeSitterParser
+from repomind.core.parser.tree_sitter_parser import TreeSitterParser, ParsedFile
 from repomind.core.type_inference.inference_engine import TypeInferenceEngine
 from repomind.core.call_graph.graph_builder import CallGraphBuilder
 from repomind.core.call_graph.resolver import SymbolResolver
