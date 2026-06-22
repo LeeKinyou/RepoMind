@@ -1,4 +1,5 @@
 """Tests for GraphStore — covers C1 (persistence) and C6 (pickle safety)."""
+
 from __future__ import annotations
 
 import pytest
@@ -19,8 +20,9 @@ class TestGraphStoreBasics:
     def test_add_relation(self, graph_store):
         graph_store.add_symbol("a.func1")
         graph_store.add_symbol("a.func2")
-        rel = SymbolRelation(source="a.func1", target="a.func2",
-                             relation_type=RelationType.CALLS)
+        rel = SymbolRelation(
+            source="a.func1", target="a.func2", relation_type=RelationType.CALLS
+        )
         graph_store.add_relation(rel)
         assert graph_store.edge_count == 1
 
@@ -35,10 +37,12 @@ class TestBFSExpand:
         graph_store.add_symbol("a")
         graph_store.add_symbol("b")
         graph_store.add_symbol("c")
-        graph_store.add_relation(SymbolRelation(source="a", target="b",
-                                                relation_type=RelationType.CALLS))
-        graph_store.add_relation(SymbolRelation(source="b", target="c",
-                                                relation_type=RelationType.CALLS))
+        graph_store.add_relation(
+            SymbolRelation(source="a", target="b", relation_type=RelationType.CALLS)
+        )
+        graph_store.add_relation(
+            SymbolRelation(source="b", target="c", relation_type=RelationType.CALLS)
+        )
         result = graph_store.bfs_expand("a", hops=2)
         assert "a" in result
         assert "b" in result
@@ -48,10 +52,12 @@ class TestBFSExpand:
         graph_store.add_symbol("a")
         graph_store.add_symbol("b")
         graph_store.add_symbol("c")
-        graph_store.add_relation(SymbolRelation(source="a", target="b",
-                                                relation_type=RelationType.CALLS))
-        graph_store.add_relation(SymbolRelation(source="b", target="c",
-                                                relation_type=RelationType.CALLS))
+        graph_store.add_relation(
+            SymbolRelation(source="a", target="b", relation_type=RelationType.CALLS)
+        )
+        graph_store.add_relation(
+            SymbolRelation(source="b", target="c", relation_type=RelationType.CALLS)
+        )
         result = graph_store.bfs_expand("a", hops=1)
         assert "a" in result
         assert "b" in result
@@ -62,8 +68,11 @@ class TestSubgraph:
     def test_get_subgraph(self, graph_store):
         graph_store.add_symbol("a.func", type="function", file_path="a.py")
         graph_store.add_symbol("b.func", type="function", file_path="b.py")
-        graph_store.add_relation(SymbolRelation(source="a.func", target="b.func",
-                                                relation_type=RelationType.CALLS))
+        graph_store.add_relation(
+            SymbolRelation(
+                source="a.func", target="b.func", relation_type=RelationType.CALLS
+            )
+        )
         result = graph_store.get_subgraph({"a.func", "b.func"})
         assert len(result.nodes) == 2
         assert len(result.edges) == 1
@@ -74,14 +83,17 @@ class TestPageRank:
         assert graph_store.pagerank() == []
 
     def test_pagerank_with_graph(self, graph_store):
+        import importlib
+
         try:
-            import scipy  # noqa: F401
+            importlib.import_module("scipy")
         except ImportError:
             pytest.skip("scipy not installed for PageRank")
         graph_store.add_symbol("a")
         graph_store.add_symbol("b")
-        graph_store.add_relation(SymbolRelation(source="a", target="b",
-                                                relation_type=RelationType.CALLS))
+        graph_store.add_relation(
+            SymbolRelation(source="a", target="b", relation_type=RelationType.CALLS)
+        )
         result = graph_store.pagerank(top_n=2)
         assert len(result) == 2
 
@@ -91,8 +103,11 @@ class TestPersistence:
 
     def test_save_and_load(self, graph_store, tmp_dir):
         graph_store.add_symbol("a.func")
-        graph_store.add_relation(SymbolRelation(source="a.func", target="a.func",
-                                                relation_type=RelationType.CALLS))
+        graph_store.add_relation(
+            SymbolRelation(
+                source="a.func", target="a.func", relation_type=RelationType.CALLS
+            )
+        )
 
         path = str(tmp_dir / "test_graph.json")
         graph_store.save(path)
@@ -129,10 +144,12 @@ class TestShortestPath:
         graph_store.add_symbol("a")
         graph_store.add_symbol("b")
         graph_store.add_symbol("c")
-        graph_store.add_relation(SymbolRelation(source="a", target="b",
-                                                relation_type=RelationType.CALLS))
-        graph_store.add_relation(SymbolRelation(source="b", target="c",
-                                                relation_type=RelationType.CALLS))
+        graph_store.add_relation(
+            SymbolRelation(source="a", target="b", relation_type=RelationType.CALLS)
+        )
+        graph_store.add_relation(
+            SymbolRelation(source="b", target="c", relation_type=RelationType.CALLS)
+        )
         path = graph_store.shortest_path("a", "c")
         assert path == ["a", "b", "c"]
 

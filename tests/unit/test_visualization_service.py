@@ -1,39 +1,51 @@
 """Tests for VisualizationService (Mermaid diagram generator) — covers T1."""
+
 from __future__ import annotations
 
-import pytest
 from repomind.services.visualization_service import VisualizationService
-from repomind.models.schemas import CallGraphResult, SymbolInfo, SymbolType, SymbolRelation, RelationType
+from repomind.models.schemas import (
+    CallGraphResult,
+    SymbolInfo,
+    SymbolType,
+    SymbolRelation,
+    RelationType,
+)
 
 
 class TestVisualizationService:
     def test_call_graph_to_mermaid(self):
         service = VisualizationService()
-        
+
         # Create symbols with special characters to test regex sanitizer (M12)
         nodes = [
             SymbolInfo(
-                name="foo", qualified_name="pkg-mod.foo:func()",
-                type=SymbolType.FUNCTION, file_path="foo.py",
-                start_line=1, end_line=5
+                name="foo",
+                qualified_name="pkg-mod.foo:func()",
+                type=SymbolType.FUNCTION,
+                file_path="foo.py",
+                start_line=1,
+                end_line=5,
             ),
             SymbolInfo(
-                name="bar", qualified_name="pkg-mod.bar:func()",
-                type=SymbolType.METHOD, file_path="bar.py",
-                start_line=10, end_line=15
+                name="bar",
+                qualified_name="pkg-mod.bar:func()",
+                type=SymbolType.METHOD,
+                file_path="bar.py",
+                start_line=10,
+                end_line=15,
             ),
         ]
         edges = [
             SymbolRelation(
                 source="pkg-mod.foo:func()",
                 target="pkg-mod.bar:func()",
-                relation_type=RelationType.CALLS
+                relation_type=RelationType.CALLS,
             )
         ]
-        
+
         result = CallGraphResult(nodes=nodes, edges=edges)
         mermaid = service.call_graph_to_mermaid(result)
-        
+
         # Check standard prefix
         assert "graph TD" in mermaid
         # Check node shapes are correctly applied
@@ -49,7 +61,7 @@ class TestVisualizationService:
             {"qualified_name": "pkg-mod.bar:func()", "name": "bar"},
         ]
         mermaid = service.dependency_tree_to_mermaid(symbols)
-        
+
         assert "graph LR" in mermaid
         assert "pkg_mod_foo_func__[foo]" in mermaid
         assert "pkg_mod_bar_func__[bar]" in mermaid

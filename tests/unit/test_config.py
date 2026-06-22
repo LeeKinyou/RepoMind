@@ -1,4 +1,5 @@
 """Tests for config module — H6 (empty string) and C3 (int parsing)."""
+
 from __future__ import annotations
 
 import os
@@ -44,9 +45,11 @@ class TestLoadConfig:
 
     def test_empty_string_in_env_is_preserved(self, tmp_path):
         """H6: Empty string should NOT fall through to os.environ."""
-        with patch.dict(os.environ, {"REPOMIND_LLM_BASE_URL": "http://fallback"}, clear=True):
+        with patch.dict(
+            os.environ, {"REPOMIND_LLM_BASE_URL": "http://fallback"}, clear=True
+        ):
             env_file = tmp_path / ".env"
-            env_file.write_text('REPOMIND_LLM_BASE_URL=\n')
+            env_file.write_text("REPOMIND_LLM_BASE_URL=\n")
             config = load_config(env_file=str(env_file))
             assert config.llm.base_url == ""
 

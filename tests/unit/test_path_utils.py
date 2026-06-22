@@ -1,4 +1,5 @@
 """Tests for path utilities — H1 (Windows paths)."""
+
 from __future__ import annotations
 
 from repomind.utils.path_utils import path_to_module
@@ -15,7 +16,9 @@ class TestPathToModule:
         assert path_to_module("pkg/__init__.py") == "pkg"
 
     def test_with_project_root(self):
-        result = path_to_module("/home/user/project/auth/login.py", "/home/user/project")
+        result = path_to_module(
+            "/home/user/project/auth/login.py", "/home/user/project"
+        )
         assert result == "auth.login"
 
     def test_with_project_root_no_match(self):

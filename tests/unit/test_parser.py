@@ -1,4 +1,5 @@
 """Tests for TreeSitterParser — covers H4 (alias) and H7 (signature extraction)."""
+
 from __future__ import annotations
 
 import pytest
@@ -12,21 +13,21 @@ def parser():
 
 class TestParseSource:
     def test_parse_class(self, parser):
-        code = 'class Foo:\n    pass\n'
+        code = "class Foo:\n    pass\n"
         result = parser.parse_source(code)
         assert len(result.symbols) == 1
         assert result.symbols[0].name == "Foo"
         assert result.symbols[0].type.value == "class"
 
     def test_parse_function(self, parser):
-        code = 'def hello():\n    pass\n'
+        code = "def hello():\n    pass\n"
         result = parser.parse_source(code)
         assert len(result.symbols) == 1
         assert result.symbols[0].name == "hello"
         assert result.symbols[0].type.value == "function"
 
     def test_parse_method(self, parser):
-        code = 'class Foo:\n    def bar(self):\n        pass\n'
+        code = "class Foo:\n    def bar(self):\n        pass\n"
         result = parser.parse_source(code)
         names = [s.name for s in result.symbols]
         assert "Foo" in names
@@ -36,19 +37,19 @@ class TestParseSource:
         assert bar_sym.parent_class is not None
 
     def test_parse_import(self, parser):
-        code = 'import os\nimport sys\n'
+        code = "import os\nimport sys\n"
         result = parser.parse_source(code)
         assert len(result.imports) == 2
 
     def test_parse_from_import(self, parser):
-        code = 'from pathlib import Path\n'
+        code = "from pathlib import Path\n"
         result = parser.parse_source(code)
         assert len(result.imports) == 1
         assert result.imports[0]["imported_name"] == "Path"
 
     def test_parse_import_alias(self, parser):
         """H4: Import aliases should be captured."""
-        code = 'from os import path as p\n'
+        code = "from os import path as p\n"
         result = parser.parse_source(code)
         assert len(result.imports) == 1
         imp = result.imports[0]
@@ -56,17 +57,17 @@ class TestParseSource:
         assert imp["alias"] == "p"
 
     def test_parse_import_no_alias(self, parser):
-        code = 'from os import path\n'
+        code = "from os import path\n"
         result = parser.parse_source(code)
         assert result.imports[0]["alias"] is None
 
     def test_parse_call(self, parser):
-        code = 'def foo():\n    bar()\n'
+        code = "def foo():\n    bar()\n"
         result = parser.parse_source(code)
         assert len(result.calls) >= 1
 
     def test_parse_self_call(self, parser):
-        code = 'class Foo:\n    def a(self):\n        self.b()\n'
+        code = "class Foo:\n    def a(self):\n        self.b()\n"
         result = parser.parse_source(code)
         self_calls = [c for c in result.calls if c["call_type"] == "self"]
         assert len(self_calls) >= 1
@@ -94,14 +95,14 @@ class TestSignatureExtraction:
     """H7: Signatures should not be truncated at type annotation colons."""
 
     def test_simple_function_signature(self, parser):
-        code = 'def foo():\n    pass\n'
+        code = "def foo():\n    pass\n"
         result = parser.parse_source(code)
         sym = result.symbols[0]
         assert "def foo" in (sym.signature or "")
 
     def test_function_with_type_hints(self, parser):
         """H7: Signature should include full parameter list, not truncate at colon."""
-        code = 'def foo(x: str, y: int) -> bool:\n    return True\n'
+        code = "def foo(x: str, y: int) -> bool:\n    return True\n"
         result = parser.parse_source(code)
         sym = result.symbols[0]
         sig = sym.signature or ""
@@ -109,7 +110,7 @@ class TestSignatureExtraction:
         assert "str" in sig or "x" in sig
 
     def test_function_with_complex_return_type(self, parser):
-        code = 'def foo() -> dict[str, list[int]]:\n    return {}\n'
+        code = "def foo() -> dict[str, list[int]]:\n    return {}\n"
         result = parser.parse_source(code)
         sym = result.symbols[0]
         sig = sym.signature or ""

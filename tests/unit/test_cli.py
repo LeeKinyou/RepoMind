@@ -1,4 +1,5 @@
 """Tests for CLI commands — covers L4 (Windows Ctrl+D)."""
+
 from __future__ import annotations
 
 from typer.testing import CliRunner

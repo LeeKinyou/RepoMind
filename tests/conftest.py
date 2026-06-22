@@ -1,4 +1,5 @@
 """Shared fixtures for RepoMind tests."""
+
 from __future__ import annotations
 
 
@@ -68,6 +69,7 @@ sqlite3.OperationalError: no such table: users"""
 def sqlite_store(tmp_dir):
     """Create a fresh SQLiteStore for testing."""
     from repomind.storage.sqlite_store import SQLiteStore
+
     db_path = str(tmp_dir / "test.db")
     store = SQLiteStore(db_path)
     yield store
@@ -78,4 +80,5 @@ def sqlite_store(tmp_dir):
 def graph_store():
     """Create a fresh GraphStore for testing."""
     from repomind.storage.graph_store import GraphStore
+
     return GraphStore()

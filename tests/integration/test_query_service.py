@@ -1,4 +1,5 @@
 """Integration tests for QueryService — covers C1 (graph loading)."""
+
 from __future__ import annotations
 
 import pytest
@@ -14,23 +15,23 @@ def indexed_project(tmp_dir):
     project = tmp_dir / "myproject"
     project.mkdir()
 
-    (project / "auth.py").write_text('''
+    (project / "auth.py").write_text("""
 class UserService:
     def login(self, username: str) -> bool:
         return True
 
     def find_user(self, name: str) -> dict:
         return {}
-''')
+""")
 
-    (project / "db.py").write_text('''
+    (project / "db.py").write_text("""
 class Database:
     def query(self, sql: str) -> list:
         return []
 
     def execute(self, sql: str) -> None:
         pass
-''')
+""")
 
     service = IndexService(index_dir=index_dir)
     service.index_directory(str(project))

@@ -1,4 +1,5 @@
 """Tests for SymbolResolver — M2 (shared resolution logic)."""
+
 from __future__ import annotations
 
 from repomind.core.call_graph.resolver import SymbolResolver

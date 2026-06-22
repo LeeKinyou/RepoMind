@@ -1,10 +1,18 @@
 """Tests for data models."""
+
 from __future__ import annotations
 
 import pytest
 from repomind.models.schemas import (
-    SymbolType, RelationType, SymbolInfo, IndexOptions, IndexResult, QueryResult,
-    RCAResult, CallGraphResult, FileInfo,
+    SymbolType,
+    RelationType,
+    SymbolInfo,
+    IndexOptions,
+    IndexResult,
+    QueryResult,
+    RCAResult,
+    CallGraphResult,
+    FileInfo,
 )
 
 
@@ -24,6 +32,7 @@ class TestSymbolType:
 
     def test_safe_symbol_type(self):
         from repomind.models.schemas import safe_symbol_type
+
         assert safe_symbol_type("class") == SymbolType.CLASS
         assert safe_symbol_type("unknown_type") == SymbolType.FUNCTION
 
@@ -38,18 +47,24 @@ class TestRelationType:
 class TestSymbolInfo:
     def test_create_minimal(self):
         sym = SymbolInfo(
-            name="foo", qualified_name="pkg.foo",
-            type=SymbolType.FUNCTION, file_path="test.py",
-            start_line=1, end_line=5,
+            name="foo",
+            qualified_name="pkg.foo",
+            type=SymbolType.FUNCTION,
+            file_path="test.py",
+            start_line=1,
+            end_line=5,
         )
         assert sym.name == "foo"
         assert sym.docstring is None
 
     def test_create_full(self):
         sym = SymbolInfo(
-            name="UserService", qualified_name="auth.UserService",
-            type=SymbolType.CLASS, file_path="auth.py",
-            start_line=10, end_line=50,
+            name="UserService",
+            qualified_name="auth.UserService",
+            type=SymbolType.CLASS,
+            file_path="auth.py",
+            start_line=10,
+            end_line=50,
             docstring="User service class",
             signature="class UserService:",
         )

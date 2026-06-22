@@ -1,4 +1,5 @@
 """Integration tests for IndexService — covers M8 (atomicity), M9 (relative_to), L6 (function counting)."""
+
 from __future__ import annotations
 
 import pytest
@@ -49,13 +50,13 @@ def hash_password(pwd: str) -> str:
     return pwd
 ''')
 
-    (project / "utils.py").write_text('''
+    (project / "utils.py").write_text("""
 def helper(x: int) -> str:
     return str(x)
 
 def process(data: dict) -> dict:
     return data
-''')
+""")
 
     return project
 
@@ -128,3 +129,45 @@ class TestClear:
         index_service.clear()
         stats = index_service.get_stats()
         assert stats["files"] == 0
+
+
+class TestIndexingIdempotencyAndCleanup:
+    def test_reindexing_is_idempotent(self, index_service, sample_project):
+        # Index project first time
+        result1 = index_service.index_directory(str(sample_project))
+        assert result1.success is True
+        stats1 = index_service.get_stats()
+
+        # Index project second time (incremental=True)
+        opts = IndexOptions(incremental=True)
+        result2 = index_service.index_directory(str(sample_project), opts)
+        assert result2.success is True
+        stats2 = index_service.get_stats()
+
+        # Assert database counts remain exactly the same
+        assert stats1["files"] == stats2["files"]
+        assert stats1["symbols"] == stats2["symbols"]
+        assert stats1["classes"] == stats2["classes"]
+        assert stats1["functions"] == stats2["functions"]
+        assert stats1["calls"] == stats2["calls"]
+
+    def test_reindexing_cleans_deleted_files(self, index_service, sample_project):
+        # Index project first time
+        result1 = index_service.index_directory(str(sample_project))
+        assert result1.success is True
+        stats1 = index_service.get_stats()
+
+        # Remove a file from the project directory
+        utils_py = sample_project / "utils.py"
+        assert utils_py.exists()
+        utils_py.unlink()
+
+        # Index project again (incremental=True)
+        opts = IndexOptions(incremental=True)
+        result2 = index_service.index_directory(str(sample_project), opts)
+        assert result2.success is True
+        stats2 = index_service.get_stats()
+
+        # Assert database has cleaned up file, symbols, and its calls/relations
+        assert stats2["files"] == stats1["files"] - 1
+        assert stats2["symbols"] < stats1["symbols"]
