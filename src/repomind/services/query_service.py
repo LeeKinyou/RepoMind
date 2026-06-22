@@ -1,9 +1,16 @@
 """Query service - hybrid retrieval and symbol lookup."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-from repomind.models.schemas import QueryOptions, QueryResult, SymbolInfo, CallGraphResult, safe_symbol_type
+from repomind.models.schemas import (
+    QueryOptions,
+    QueryResult,
+    SymbolInfo,
+    CallGraphResult,
+    safe_symbol_type,
+)
 from repomind.storage.sqlite_store import SQLiteStore
 from repomind.storage.graph_store import GraphStore
 from repomind.core.retrieval.hybrid_retriever import HybridRetriever
@@ -34,7 +41,9 @@ class QueryService:
                 try:
                     self.graph.load(str(graph_path))
                 except GraphLoadError as e:
-                    logger.warning("Failed to load graph: %s. Starting with empty graph.", e)
+                    logger.warning(
+                        "Failed to load graph: %s. Starting with empty graph.", e
+                    )
         self.retriever = retriever or HybridRetriever(self.sqlite, self.graph)
 
     def _dict_to_symbol_info(self, sym_dict: dict) -> SymbolInfo:
@@ -53,6 +62,8 @@ class QueryService:
         """Execute hybrid retrieval query."""
         import time
         import logging
+        import litellm
+        from repomind.utils.config import load_config
         from repomind.utils.errors import QueryError
 
         logger = logging.getLogger(__name__)
@@ -75,14 +86,71 @@ class QueryService:
             symbols.append(self._dict_to_symbol_info(r.symbol))
             sources.append(r.source)
 
+        # AI Reasoning answering using LiteLLM
+        config = load_config()
+        model_name = config.llm.model or "claude-sonnet-4-6"
+
+        # Build prompt
+        context_parts = []
+        for sym in symbols:
+            sig = sym.signature or "No signature"
+            doc = sym.docstring or "No docstring"
+            part = f"- **Symbol**: `{sym.qualified_name}` ({sym.type.value})\n"
+            part += f"  **File**: `{sym.file_path}` (Lines {sym.start_line}-{sym.end_line})\n"
+            part += f"  **Signature**: `{sig}`\n"
+            part += f"  **Docstring**: {doc}\n"
+            context_parts.append(part)
+
+        symbols_text = (
+            "\n".join(context_parts)
+            if context_parts
+            else "[No relevant symbols found in the index]"
+        )
+
+        prompt = (
+            f"You are a Repository Intelligence Assistant. Answer the user's question about the codebase "
+            f"using the retrieved symbol contexts below. Be precise and professional.\n\n"
+            f"User Question:\n{query}\n\n"
+            f"Retrieved Code Contexts:\n{symbols_text}\n"
+        )
+
+        litellm_args = {}
+        if config.llm.api_key:
+            litellm_args["api_key"] = config.llm.api_key
+        if config.llm.base_url:
+            litellm_args["base_url"] = config.llm.base_url
+
+        try:
+            response = litellm.completion(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                timeout=30,
+                **litellm_args,
+            )
+            answer = response.choices[0].message.content
+        except Exception as e:
+            logger.warning(
+                "LiteLLM completion failed: %s. Falling back to deterministic answer.",
+                e,
+            )
+            answer = f"Found {len(symbols)} results for: {query}. (AI answering offline or not configured: {e})"
+
         elapsed = time.time() - start
         return QueryResult(
-            answer=f"Found {len(symbols)} results for: {query}",
+            answer=answer,
             symbols=symbols,
             confidence=max((r.score for r in results), default=0.0),
             sources=list(set(sources)),
             elapsed_seconds=round(elapsed, 3),
         )
+
+    def lookup_symbol(self, query: str, limit: int = 1) -> list[SymbolInfo]:
+        """Look up symbols locally from database/retriever without calling LLM."""
+        try:
+            results = self.retriever.retrieve(query, top_k=limit)
+            return [self._dict_to_symbol_info(r.symbol) for r in results]
+        except Exception:
+            return []
 
     def get_symbol_info(self, qualified_name: str) -> SymbolInfo | None:
         """Get detailed symbol info by qualified name."""

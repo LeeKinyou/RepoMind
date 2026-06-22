@@ -1,70 +1,113 @@
 """Show command for RepoMind CLI."""
+
 from pathlib import Path
 from dataclasses import dataclass, field
 
+from rich.text import Text
+from rich.rule import Rule
+
 from repomind.cli.commands import registry
 from repomind.cli.components.progress import show_spinner
-from repomind.cli.components.tables import show_symbol_detail
+from repomind.cli.components.tables import show_symbol_detail, show_paged_source
 
 
 @dataclass
 class ShowCommand:
-    """Show symbol detail command。"""
+    """Show symbol detail command."""
 
     name: str = "/show"
     aliases: list[str] = field(default_factory=lambda: ["/s"])
-    description: str = "查看符号详情"
+    description: str = "Show symbol details"
 
-    # 依赖注入
+    # Dependencies
     console: any = None
     project_path: Path = None
     query_service: any = None
 
     def execute(self, args: str) -> None:
-        """Execute show command。
+        """Execute show command.
 
         Args:
             args: Symbol name
         """
         if not args:
-            self.console.print("[yellow]请提供Symbol name[/]")
+            self.console.print(
+                Text(
+                    "  Usage: /show <symbol-name>",
+                    style="yellow",
+                )
+            )
             return
 
         self._do_show(args)
 
     def _do_show(self, name: str) -> None:
-        """显示符号详情。"""
-        from repomind.models.schemas import QueryOptions
+        """Display symbol details with paginated source code.
+
+        Args:
+            name: Symbol name to look up
+        """
 
         with show_spinner(self.console, "Searching..."):
-            result = self.query_service.search(name, QueryOptions(max_results=1))
+            symbols = self.query_service.lookup_symbol(name, limit=1)
 
-        if not result.symbols:
-            self.console.print(f"[yellow]Not found: {name}[/]")
+        if not symbols:
+            self.console.print(
+                Text(
+                    f"  Not found: {name}",
+                    style="yellow",
+                )
+            )
             return
 
-        sym = result.symbols[0]
+        sym = symbols[0]
 
-        # 获取调用关系
+        # Get call relations
         callers = self.query_service.get_callers(sym.qualified_name)
         callees = self.query_service.get_callees(sym.qualified_name)
 
-        # 读取源代码
+        # Read source code
         source_code = None
         try:
             file_path = Path(sym.file_path)
             if file_path.exists():
-                lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = file_path.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines()
                 start = max(0, sym.start_line - 1)
                 end = min(len(lines), sym.end_line)
                 source_code = "\n".join(lines[start:end])
         except Exception:
             pass
 
-        show_symbol_detail(self.console, sym, callers, callees, source_code)
+        # Display detail (without source — we'll page it separately if long)
+        source_lines = source_code.count("\n") + 1 if source_code else 0
+        if source_code and source_lines > 40:
+            # Show metadata + docs + relations first, then paged source
+            show_symbol_detail(self.console, sym, callers, callees, source_code=None)
+            self.console.print(Text("  Source", style="bold"))
+            self.console.print(Rule(style="dim", characters="─"))
+            show_paged_source(self.console, source_code, sym.start_line)
+            self.console.print()
+        else:
+            show_symbol_detail(self.console, sym, callers, callees, source_code)
+
+        # Next-step suggestion
+        hint = Text()
+        hint.append("  Next: ", style="dim cyan")
+        hint.append("/graph ", style="cyan")
+        hint.append(sym.name, style="white")
+        hint.append(" for call graph, ", style="dim")
+        hint.append("/callers", style="cyan")
+        hint.append(" or ", style="dim")
+        hint.append("/callees", style="cyan")
+        hint.append(" for relations", style="dim")
+        self.console.print(hint)
+        self.console.print()
 
 
-# 注册命令
 def register_show_command(console, project_path, query_service):
-    cmd = ShowCommand(console=console, project_path=project_path, query_service=query_service)
+    cmd = ShowCommand(
+        console=console, project_path=project_path, query_service=query_service
+    )
     registry.register(cmd)
