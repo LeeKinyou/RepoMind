@@ -1,4 +1,5 @@
 """SQLite structured storage for RepoMind."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -7,7 +8,8 @@ from contextlib import contextmanager
 from typing import Generator
 
 from repomind.models.schemas import (
-    SymbolInfo, FileInfo,
+    SymbolInfo,
+    FileInfo,
 )
 
 
@@ -109,7 +111,9 @@ CREATE INDEX IF NOT EXISTS idx_inherits_parent_name ON inherits(parent_name);
 class SQLiteStore:
     """SQLite-based structured storage for symbols, relations, and metadata."""
 
-    _CLEARABLE_TABLES = frozenset({"inherits", "calls", "imports", "type_info", "symbols", "files"})
+    _CLEARABLE_TABLES = frozenset(
+        {"inherits", "calls", "imports", "type_info", "symbols", "files"}
+    )
 
     def __init__(self, db_path: str = ".repomind/index.db"):
         self.db_path = Path(db_path)
@@ -172,12 +176,23 @@ class SQLiteStore:
                 conn.execute("DELETE FROM imports WHERE file_id = ?", (existing["id"],))
                 conn.execute(
                     "UPDATE files SET hash=?, line_count=?, size_bytes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                    (file_info.hash, file_info.line_count, file_info.size_bytes, existing["id"]),
+                    (
+                        file_info.hash,
+                        file_info.line_count,
+                        file_info.size_bytes,
+                        existing["id"],
+                    ),
                 )
                 return existing["id"]
             cur = conn.execute(
                 "INSERT INTO files (path, hash, language, line_count, size_bytes) VALUES (?, ?, ?, ?, ?)",
-                (file_info.path, file_info.hash, file_info.language, file_info.line_count, file_info.size_bytes),
+                (
+                    file_info.path,
+                    file_info.hash,
+                    file_info.language,
+                    file_info.line_count,
+                    file_info.size_bytes,
+                ),
             )
             assert cur.lastrowid is not None
             return cur.lastrowid
@@ -187,6 +202,15 @@ class SQLiteStore:
             row = conn.execute("SELECT * FROM files WHERE path = ?", (path,)).fetchone()
             return dict(row) if row else None
 
+    def get_all_files(self) -> list[dict]:
+        with self._read_connect() as conn:
+            rows = conn.execute("SELECT * FROM files").fetchall()
+            return [dict(r) for r in rows]
+
+    def delete_file(self, file_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM files WHERE id = ?", (file_id,))
+
     # === Symbol operations ===
 
     def insert_symbol(self, symbol: SymbolInfo, file_id: int) -> int:
@@ -194,7 +218,8 @@ class SQLiteStore:
             parent_id = None
             if symbol.parent_class:
                 parent = conn.execute(
-                    "SELECT id FROM symbols WHERE qualified_name = ?", (symbol.parent_class,)
+                    "SELECT id FROM symbols WHERE qualified_name = ?",
+                    (symbol.parent_class,),
                 ).fetchone()
                 if parent:
                     parent_id = parent["id"]
@@ -202,9 +227,18 @@ class SQLiteStore:
                 """INSERT INTO symbols (file_id, name, type, qualified_name, start_line, end_line,
                    docstring, signature, is_exported, parent_class_id)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (file_id, symbol.name, symbol.type.value, symbol.qualified_name,
-                 symbol.start_line, symbol.end_line, symbol.docstring, symbol.signature,
-                 symbol.is_exported, parent_id),
+                (
+                    file_id,
+                    symbol.name,
+                    symbol.type.value,
+                    symbol.qualified_name,
+                    symbol.start_line,
+                    symbol.end_line,
+                    symbol.docstring,
+                    symbol.signature,
+                    symbol.is_exported,
+                    parent_id,
+                ),
             )
             assert cur.lastrowid is not None
             return cur.lastrowid
@@ -232,41 +266,92 @@ class SQLiteStore:
 
     # === Relation operations ===
 
-    def insert_call(self, caller_qname: str, callee_qname: str, call_type: str, line_number: int | None = None, confidence: float = 1.0) -> None:
+    def insert_call(
+        self,
+        caller_qname: str,
+        callee_qname: str,
+        call_type: str,
+        line_number: int | None = None,
+        confidence: float = 1.0,
+    ) -> None:
         with self._connect() as conn:
-            caller = conn.execute("SELECT id FROM symbols WHERE qualified_name = ?", (caller_qname,)).fetchone()
-            callee = conn.execute("SELECT id FROM symbols WHERE qualified_name = ?", (callee_qname,)).fetchone()
+            caller = conn.execute(
+                "SELECT id FROM symbols WHERE qualified_name = ?", (caller_qname,)
+            ).fetchone()
+            callee = conn.execute(
+                "SELECT id FROM symbols WHERE qualified_name = ?", (callee_qname,)
+            ).fetchone()
             if caller and callee:
                 conn.execute(
                     "INSERT INTO calls (caller_id, callee_id, call_type, confidence, line_number) VALUES (?, ?, ?, ?, ?)",
                     (caller["id"], callee["id"], call_type, confidence, line_number),
                 )
 
-    def insert_import(self, file_id: int, module_path: str, imported_name: str | None = None, alias: str | None = None, is_relative: bool = False, relative_level: int = 0, line_number: int | None = None) -> None:
+    def insert_import(
+        self,
+        file_id: int,
+        module_path: str,
+        imported_name: str | None = None,
+        alias: str | None = None,
+        is_relative: bool = False,
+        relative_level: int = 0,
+        line_number: int | None = None,
+    ) -> None:
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO imports (file_id, module_path, imported_name, alias, is_relative, relative_level, line_number) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (file_id, module_path, imported_name, alias, is_relative, relative_level, line_number),
+                (
+                    file_id,
+                    module_path,
+                    imported_name,
+                    alias,
+                    is_relative,
+                    relative_level,
+                    line_number,
+                ),
             )
 
-    def insert_inherit(self, child_qname: str, parent_name: str, parent_qname: str | None = None) -> None:
+    def insert_inherit(
+        self, child_qname: str, parent_name: str, parent_qname: str | None = None
+    ) -> None:
         with self._connect() as conn:
-            child = conn.execute("SELECT id FROM symbols WHERE qualified_name = ?", (child_qname,)).fetchone()
+            child = conn.execute(
+                "SELECT id FROM symbols WHERE qualified_name = ?", (child_qname,)
+            ).fetchone()
             parent = None
             if parent_qname:
-                parent = conn.execute("SELECT id FROM symbols WHERE qualified_name = ?", (parent_qname,)).fetchone()
+                parent = conn.execute(
+                    "SELECT id FROM symbols WHERE qualified_name = ?", (parent_qname,)
+                ).fetchone()
             if child:
                 conn.execute(
                     "INSERT INTO inherits (child_id, parent_id, parent_name) VALUES (?, ?, ?)",
                     (child["id"], parent["id"] if parent else None, parent_name),
                 )
 
-    def insert_type_info(self, symbol_id: int, parameter_name: str | None, inferred_type: str, confidence: float, strategy: str, type_annotation: str | None = None, evidence: str | None = None) -> int:
+    def insert_type_info(
+        self,
+        symbol_id: int,
+        parameter_name: str | None,
+        inferred_type: str,
+        confidence: float,
+        strategy: str,
+        type_annotation: str | None = None,
+        evidence: str | None = None,
+    ) -> int:
         """Insert type inference result."""
         with self._connect() as conn:
             cur = conn.execute(
                 "INSERT INTO type_info (symbol_id, parameter_name, type_annotation, inferred_type, confidence, inference_strategy, evidence) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (symbol_id, parameter_name, type_annotation, inferred_type, confidence, strategy, evidence),
+                (
+                    symbol_id,
+                    parameter_name,
+                    type_annotation,
+                    inferred_type,
+                    confidence,
+                    strategy,
+                    evidence,
+                ),
             )
             assert cur.lastrowid is not None
             return cur.lastrowid
@@ -296,12 +381,27 @@ class SQLiteStore:
     def get_stats(self) -> dict:
         with self._read_connect() as conn:
             files = conn.execute("SELECT COUNT(*) as cnt FROM files").fetchone()["cnt"]
-            symbols = conn.execute("SELECT COUNT(*) as cnt FROM symbols").fetchone()["cnt"]
-            classes = conn.execute("SELECT COUNT(*) as cnt FROM symbols WHERE type='class'").fetchone()["cnt"]
-            functions = conn.execute("SELECT COUNT(*) as cnt FROM symbols WHERE type IN ('function','method')").fetchone()["cnt"]
-            imports = conn.execute("SELECT COUNT(*) as cnt FROM imports").fetchone()["cnt"]
+            symbols = conn.execute("SELECT COUNT(*) as cnt FROM symbols").fetchone()[
+                "cnt"
+            ]
+            classes = conn.execute(
+                "SELECT COUNT(*) as cnt FROM symbols WHERE type='class'"
+            ).fetchone()["cnt"]
+            functions = conn.execute(
+                "SELECT COUNT(*) as cnt FROM symbols WHERE type IN ('function','method')"
+            ).fetchone()["cnt"]
+            imports = conn.execute("SELECT COUNT(*) as cnt FROM imports").fetchone()[
+                "cnt"
+            ]
             calls = conn.execute("SELECT COUNT(*) as cnt FROM calls").fetchone()["cnt"]
-            return {"files": files, "symbols": symbols, "classes": classes, "functions": functions, "imports": imports, "calls": calls}
+            return {
+                "files": files,
+                "symbols": symbols,
+                "classes": classes,
+                "functions": functions,
+                "imports": imports,
+                "calls": calls,
+            }
 
     def clear(self) -> None:
         with self._connect() as conn:

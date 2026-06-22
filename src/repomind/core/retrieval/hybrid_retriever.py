@@ -1,4 +1,5 @@
 """Hybrid retrieval engine combining BM25, vector search, and graph expansion."""
+
 from __future__ import annotations
 
 import math
@@ -13,6 +14,7 @@ from repomind.storage.graph_store import GraphStore
 @dataclass
 class RetrievalResult:
     """A single retrieval result with fused score."""
+
     symbol: dict
     score: float
     source: str  # "bm25", "vector", "graph"
@@ -34,7 +36,7 @@ class BM25Index:
     @staticmethod
     def _tokenize(text: str) -> list[str]:
         """Split text on dots, underscores, and whitespace for code-aware tokenization."""
-        return [t for t in re.split(r'[_.\s]+', text.lower()) if t]
+        return [t for t in re.split(r"[_.\s]+", text.lower()) if t]
 
     def build(self, documents: list[dict]) -> None:
         """Build index from symbol documents."""
@@ -65,7 +67,9 @@ class BM25Index:
                     tf = freq[qt]
                     df = self.df.get(qt, 0)
                     idf = math.log((self.n - df + 0.5) / (df + 0.5) + 1.0)
-                    tf_norm = (tf * (self.k1 + 1)) / (tf + self.k1 * (1 - self.b + self.b * dl / self.avg_dl))
+                    tf_norm = (tf * (self.k1 + 1)) / (
+                        tf + self.k1 * (1 - self.b + self.b * dl / self.avg_dl)
+                    )
                     score += idf * tf_norm
             scores.append((i, score))
         scores.sort(key=lambda x: x[1], reverse=True)
@@ -87,7 +91,9 @@ class HybridRetriever:
         self.bm25.build(symbols)
         self._built = True
 
-    def retrieve(self, query: str, top_k: int = 10, expand_hops: int = 2) -> list[RetrievalResult]:
+    def retrieve(
+        self, query: str, top_k: int = 10, expand_hops: int = 2
+    ) -> list[RetrievalResult]:
         """Hybrid retrieval with BM25 + graph expansion, fused via RRF."""
         if not self._built:
             self.build_index()
@@ -97,19 +103,27 @@ class HybridRetriever:
         bm25_results = []
         for idx, score in bm25_hits:
             doc = self.bm25.docs[idx]
-            bm25_results.append(RetrievalResult(
-                symbol=doc, score=score, source="bm25",
-                matched_text=f"{doc.get('name', '')} ({doc.get('type', '')})",
-            ))
+            bm25_results.append(
+                RetrievalResult(
+                    symbol=doc,
+                    score=score,
+                    source="bm25",
+                    matched_text=f"{doc.get('name', '')} ({doc.get('type', '')})",
+                )
+            )
 
         # SQLite keyword search
         sql_hits = self.sqlite.search_symbols(query, limit=top_k * 2)
         sql_results = []
         for doc in sql_hits:
-            sql_results.append(RetrievalResult(
-                symbol=doc, score=1.0, source="keyword",
-                matched_text=f"{doc.get('name', '')} ({doc.get('type', '')})",
-            ))
+            sql_results.append(
+                RetrievalResult(
+                    symbol=doc,
+                    score=1.0,
+                    source="keyword",
+                    matched_text=f"{doc.get('name', '')} ({doc.get('type', '')})",
+                )
+            )
 
         # Graph expansion from top BM25 hits
         graph_results = []
@@ -124,16 +138,22 @@ class HybridRetriever:
                         seen_qnames.add(eq)
                         sym = self.sqlite.get_symbol_by_qualified_name(eq)
                         if sym:
-                            graph_results.append(RetrievalResult(
-                                symbol=sym, score=0.5, source="graph",
-                                matched_text=f"graph-expanded: {eq}",
-                            ))
+                            graph_results.append(
+                                RetrievalResult(
+                                    symbol=sym,
+                                    score=0.5,
+                                    source="graph",
+                                    matched_text=f"graph-expanded: {eq}",
+                                )
+                            )
 
         # RRF Fusion
         all_results = bm25_results + sql_results + graph_results
         return self._rrf_fuse(all_results, top_k)
 
-    def _rrf_fuse(self, results: list[RetrievalResult], top_k: int, k: int = 60) -> list[RetrievalResult]:
+    def _rrf_fuse(
+        self, results: list[RetrievalResult], top_k: int, k: int = 60
+    ) -> list[RetrievalResult]:
         """Reciprocal Rank Fusion across sources."""
         from collections import defaultdict
 
@@ -162,12 +182,14 @@ class HybridRetriever:
                 for r in group
             )
             best = max(group, key=lambda x: x.score)
-            fused.append(RetrievalResult(
-                symbol=best.symbol,
-                score=rrf_score,
-                source="+".join(sorted(set(r.source for r in group))),
-                matched_text=best.matched_text,
-            ))
+            fused.append(
+                RetrievalResult(
+                    symbol=best.symbol,
+                    score=rrf_score,
+                    source="+".join(sorted(set(r.source for r in group))),
+                    matched_text=best.matched_text,
+                )
+            )
 
         fused.sort(key=lambda x: x.score, reverse=True)
         return fused[:top_k]

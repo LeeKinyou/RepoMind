@@ -1,4 +1,5 @@
 """NetworkX in-memory graph storage for RepoMind."""
+
 from __future__ import annotations
 
 import json
@@ -7,7 +8,13 @@ import hmac as hmac_mod
 import networkx as nx
 from collections import deque
 
-from repomind.models.schemas import SymbolRelation, RelationType, SymbolInfo, CallGraphResult, safe_symbol_type
+from repomind.models.schemas import (
+    SymbolRelation,
+    RelationType,
+    SymbolInfo,
+    CallGraphResult,
+    safe_symbol_type,
+)
 from repomind.utils.errors import GraphLoadError
 
 
@@ -40,7 +47,9 @@ class GraphStore:
             if node not in self.graph:
                 continue
             visited.add(node)
-            for neighbor in set(self.graph.predecessors(node)) | set(self.graph.successors(node)):
+            for neighbor in set(self.graph.predecessors(node)) | set(
+                self.graph.successors(node)
+            ):
                 if neighbor not in visited:
                     queue.append((neighbor, depth + 1))
         return visited
@@ -52,20 +61,25 @@ class GraphStore:
         edges = []
         for node in sub.nodes():
             data = sub.nodes[node]
-            symbol_nodes.append(SymbolInfo(
-                name=node.split(".")[-1],
-                qualified_name=node,
-                type=safe_symbol_type(data.get("type", "function")),
-                file_path=data.get("file_path", ""),
-                start_line=data.get("start_line", 0),
-                end_line=data.get("end_line", 0),
-            ))
+            symbol_nodes.append(
+                SymbolInfo(
+                    name=node.split(".")[-1],
+                    qualified_name=node,
+                    type=safe_symbol_type(data.get("type", "function")),
+                    file_path=data.get("file_path", ""),
+                    start_line=data.get("start_line", 0),
+                    end_line=data.get("end_line", 0),
+                )
+            )
         for u, v, data in sub.edges(data=True):
-            edges.append(SymbolRelation(
-                source=u, target=v,
-                relation_type=RelationType(data.get("relation_type", "calls")),
-                weight=data.get("weight", 1.0),
-            ))
+            edges.append(
+                SymbolRelation(
+                    source=u,
+                    target=v,
+                    relation_type=RelationType(data.get("relation_type", "calls")),
+                    weight=data.get("weight", 1.0),
+                )
+            )
         return CallGraphResult(nodes=symbol_nodes, edges=edges)
 
     def pagerank(self, top_n: int = 20) -> list[tuple[str, float]]:
@@ -80,9 +94,11 @@ class GraphStore:
         undirected = self.graph.to_undirected()
         try:
             from networkx.algorithms.community import louvain_communities
+
             return list(louvain_communities(undirected))
         except ImportError:
             from networkx.algorithms.community import greedy_modularity_communities
+
             return [set(c) for c in greedy_modularity_communities(undirected)]
 
     def shortest_path(self, source: str, target: str) -> list[str] | None:
@@ -104,6 +120,7 @@ class GraphStore:
     def load(self, path: str) -> None:
         """Load graph from disk, verifying HMAC signature and loading JSON."""
         import os
+
         if not os.path.exists(path):
             return  # No graph file yet, start with empty graph
 
@@ -117,7 +134,9 @@ class GraphStore:
         try:
             expected = hmac_mod.new(b"repomind", data, hashlib.sha256).hexdigest()
             if not hmac_mod.compare_digest(sig_line.decode(), expected):
-                raise GraphLoadError("Graph file signature mismatch - possible tampering")
+                raise GraphLoadError(
+                    "Graph file signature mismatch - possible tampering"
+                )
         except (ValueError, UnicodeDecodeError):
             raise GraphLoadError("Invalid graph file format")
 
@@ -125,7 +144,9 @@ class GraphStore:
             graph_data = json.loads(data.decode("utf-8"))
             self.graph = nx.node_link_graph(graph_data)
         except UnicodeDecodeError:
-            raise GraphLoadError("Graph file is not in JSON format (possibly legacy pickle format). Delete the file and re-index.")
+            raise GraphLoadError(
+                "Graph file is not in JSON format (possibly legacy pickle format). Delete the file and re-index."
+            )
         except Exception as e:
             raise GraphLoadError(f"Failed to parse graph JSON: {e}")
 

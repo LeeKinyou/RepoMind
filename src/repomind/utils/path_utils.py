@@ -1,4 +1,5 @@
 """Path utilities for RepoMind."""
+
 from __future__ import annotations
 
 from pathlib import PurePosixPath, Path

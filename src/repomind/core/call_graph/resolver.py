@@ -1,4 +1,5 @@
 """Shared symbol resolution logic for RepoMind."""
+
 from __future__ import annotations
 
 from typing import Any, Mapping
@@ -20,12 +21,18 @@ class SymbolResolver:
         Returns:
             Qualified name of the caller, or ``None`` if unresolvable.
         """
+        if call.get("caller_qname"):
+            return call["caller_qname"]
         if call.get("caller_class"):
             return call["caller_class"]
         return path_to_module(file_path)
 
     @staticmethod
-    def resolve_callee(call: Mapping[str, Any], caller_class: str | None, symbol_index: dict[str, list[str]]) -> str | None:
+    def resolve_callee(
+        call: Mapping[str, Any],
+        caller_class: str | None,
+        symbol_index: dict[str, list[str]],
+    ) -> str | None:
         """Resolve callee qualified name from a call dict.
 
         Args:

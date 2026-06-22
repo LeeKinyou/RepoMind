@@ -1,7 +1,8 @@
 """Call graph builder for RepoMind."""
+
 from __future__ import annotations
 
-from repomind.core.parser.tree_sitter_parser import ParsedFile, ImportInfo, CallInfo
+from repomind.core.parser.tree_sitter_parser import ImportInfo, ParsedFile
 from repomind.storage.graph_store import GraphStore
 from repomind.models.schemas import SymbolRelation, RelationType
 from repomind.core.call_graph.resolver import SymbolResolver
@@ -23,7 +24,9 @@ class CallGraphBuilder:
         # Phase 1: Index all symbols
         for pf in parsed_files:
             for sym in pf.symbols:
-                self.graph.add_symbol(sym.qualified_name, type=sym.type.value, file_path=sym.file_path)
+                self.graph.add_symbol(
+                    sym.qualified_name, type=sym.type.value, file_path=sym.file_path
+                )
                 self._symbol_index.setdefault(sym.name, []).append(sym.qualified_name)
 
         # Phase 2: Build import edges (fixes S1)
@@ -32,13 +35,19 @@ class CallGraphBuilder:
                 qname = self._resolve_import(imp)
                 if qname:
                     short_name = qname.rsplit(".", 1)[-1] if "." in qname else qname
-                    if short_name in self._symbol_index and qname in self._symbol_index[short_name]:
+                    if (
+                        short_name in self._symbol_index
+                        and qname in self._symbol_index[short_name]
+                    ):
                         file_qname = path_to_module(pf.path)
-                        self.graph.add_relation(SymbolRelation(
-                            source=file_qname, target=qname,
-                            relation_type=RelationType.IMPORTS,
-                            line_number=imp.get("line_number"),
-                        ))
+                        self.graph.add_relation(
+                            SymbolRelation(
+                                source=file_qname,
+                                target=qname,
+                                relation_type=RelationType.IMPORTS,
+                                line_number=imp.get("line_number"),
+                            )
+                        )
 
         # Phase 3: Build inheritance edges (fixes H1 & M18)
         for pf in parsed_files:
@@ -58,7 +67,9 @@ class CallGraphBuilder:
                             for imp in pf.imports:
                                 alias = imp.get("alias")
                                 imp_name = imp.get("imported_name")
-                                if (alias and alias == parent) or (not alias and imp_name == parent):
+                                if (alias and alias == parent) or (
+                                    not alias and imp_name == parent
+                                ):
                                     resolved = self._resolve_import(imp)
                                     if resolved in parent_candidates:
                                         parent_qname = resolved
@@ -66,25 +77,31 @@ class CallGraphBuilder:
                             else:
                                 parent_qname = parent_candidates[0]
 
-                    self.graph.add_relation(SymbolRelation(
-                        source=cls["qualified_name"],
-                        target=parent_qname,
-                        relation_type=RelationType.INHERITS,
-                        line_number=cls.get("line_number"),
-                    ))
+                    self.graph.add_relation(
+                        SymbolRelation(
+                            source=cls["qualified_name"],
+                            target=parent_qname,
+                            relation_type=RelationType.INHERITS,
+                            line_number=cls.get("line_number"),
+                        )
+                    )
 
         # Phase 4: Build call edges
         for pf in parsed_files:
             for call in pf.calls:
                 caller_qname = SymbolResolver.resolve_caller(call, pf.path)
-                callee_qname = SymbolResolver.resolve_callee(call, call.get("caller_class"), self._symbol_index)
+                callee_qname = SymbolResolver.resolve_callee(
+                    call, call.get("caller_class"), self._symbol_index
+                )
                 if caller_qname and callee_qname:
-                    self.graph.add_relation(SymbolRelation(
-                        source=caller_qname,
-                        target=callee_qname,
-                        relation_type=RelationType.CALLS,
-                        line_number=call.get("line_number"),
-                    ))
+                    self.graph.add_relation(
+                        SymbolRelation(
+                            source=caller_qname,
+                            target=callee_qname,
+                            relation_type=RelationType.CALLS,
+                            line_number=call.get("line_number"),
+                        )
+                    )
 
         return self.graph
 

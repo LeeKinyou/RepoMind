@@ -1,4 +1,5 @@
 """Tree-sitter based Python parser for RepoMind."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,6 +15,7 @@ from repomind.utils.path_utils import path_to_module
 
 class CallInfo(TypedDict):
     caller_class: str | None
+    caller_qname: str | None
     target: str
     call_type: str  # "direct" | "self" | "method"
     line_number: int
@@ -38,6 +40,7 @@ class ClassInfo(TypedDict):
 @dataclass
 class ParsedFile:
     """Result of parsing a single file."""
+
     path: str
     source: bytes
     symbols: list[SymbolInfo] = field(default_factory=list)
@@ -53,7 +56,7 @@ class TreeSitterParser:
         self._lang = Language(tspython.language())
         self._parser = Parser(self._lang)
 
-    def parse_file(self, file_path: str) -> ParsedFile:
+    def parse_file(self, file_path: str, project_root: str | None = None) -> ParsedFile:
         """Parse a Python file and extract symbols, imports, and calls."""
         path = Path(file_path)
         source = path.read_bytes()
@@ -61,31 +64,54 @@ class TreeSitterParser:
         root = tree.root_node
 
         pf = ParsedFile(path=str(path), source=source)
-        self._walk_node(root, pf, parent_class=None, module_path=self._to_module_path(path))
+        self._walk_node(
+            root,
+            pf,
+            parent_class=None,
+            parent_func=None,
+            module_path=self._to_module_path(path, project_root),
+        )
         return pf
 
-    def parse_source(self, source: str, file_path: str = "<string>") -> ParsedFile:
+    def parse_source(
+        self, source: str, file_path: str = "<string>", project_root: str | None = None
+    ) -> ParsedFile:
         """Parse Python source code string."""
         source_bytes = source.encode("utf-8")
         tree = self._parser.parse(source_bytes)
         root = tree.root_node
         pf = ParsedFile(path=file_path, source=source_bytes)
-        self._walk_node(root, pf, parent_class=None, module_path=path_to_module(file_path))
+        self._walk_node(
+            root,
+            pf,
+            parent_class=None,
+            parent_func=None,
+            module_path=path_to_module(file_path, project_root=project_root or ""),
+        )
         return pf
 
-    def _walk_node(self, node: Node, pf: ParsedFile, parent_class: str | None, module_path: str) -> None:
+    def _walk_node(
+        self,
+        node: Node,
+        pf: ParsedFile,
+        parent_class: str | None,
+        parent_func: str | None,
+        module_path: str,
+    ) -> None:
         for child in node.children:
             if child.type == "class_definition":
                 self._extract_class(child, pf, module_path)
             elif child.type == "function_definition":
-                self._extract_function(child, pf, parent_class, module_path)
+                self._extract_function(
+                    child, pf, parent_class, parent_func, module_path
+                )
             elif child.type in ("import_statement", "import_from_statement"):
                 self._extract_import(child, pf)
             elif child.type == "call":
-                self._extract_call(child, pf, parent_class, module_path)
-                self._walk_node(child, pf, parent_class, module_path)
+                self._extract_call(child, pf, parent_class, parent_func, module_path)
+                self._walk_node(child, pf, parent_class, parent_func, module_path)
             else:
-                self._walk_node(child, pf, parent_class, module_path)
+                self._walk_node(child, pf, parent_class, parent_func, module_path)
 
     def _extract_class(self, node: Node, pf: ParsedFile, module_path: str) -> None:
         name_node = node.child_by_field_name("name")
@@ -108,18 +134,40 @@ class TreeSitterParser:
                 elif base.type == "attribute":
                     parent_names.append(self._get_attribute_text(base))
 
-        pf.symbols.append(SymbolInfo(
-            name=name, qualified_name=qname, type=SymbolType.CLASS,
-            file_path=pf.path, start_line=start_line, end_line=end_line,
-            docstring=docstring,
-        ))
-        pf.classes.append({"name": name, "qualified_name": qname, "parents": parent_names, "line_number": start_line})
+        pf.symbols.append(
+            SymbolInfo(
+                name=name,
+                qualified_name=qname,
+                type=SymbolType.CLASS,
+                file_path=pf.path,
+                start_line=start_line,
+                end_line=end_line,
+                docstring=docstring,
+            )
+        )
+        pf.classes.append(
+            {
+                "name": name,
+                "qualified_name": qname,
+                "parents": parent_names,
+                "line_number": start_line,
+            }
+        )
 
         # Walk class body for methods
         if body:
-            self._walk_node(body, pf, parent_class=qname, module_path=module_path)
+            self._walk_node(
+                body, pf, parent_class=qname, parent_func=None, module_path=module_path
+            )
 
-    def _extract_function(self, node: Node, pf: ParsedFile, parent_class: str | None, module_path: str) -> None:
+    def _extract_function(
+        self,
+        node: Node,
+        pf: ParsedFile,
+        parent_class: str | None,
+        parent_func: str | None,
+        module_path: str,
+    ) -> None:
         name_node = node.child_by_field_name("name")
         if not name_node:
             return
@@ -133,24 +181,31 @@ class TreeSitterParser:
 
         body = node.child_by_field_name("body")
         if body:
-            sig_bytes = pf.source[node.start_byte:body.start_byte]
+            sig_bytes = pf.source[node.start_byte : body.start_byte]
             signature = sig_bytes.decode("utf-8").rstrip().rstrip(":").strip()
         else:
             signature = self._node_text(node).split("\n")[0].strip()
         docstring = self._extract_docstring(body)
 
-        pf.symbols.append(SymbolInfo(
-            name=name, qualified_name=qname, type=sym_type,
-            file_path=pf.path,
-            start_line=node.start_point[0] + 1,
-            end_line=node.end_point[0] + 1,
-            docstring=docstring, signature=signature,
-            parent_class=parent_class,
-        ))
+        pf.symbols.append(
+            SymbolInfo(
+                name=name,
+                qualified_name=qname,
+                type=sym_type,
+                file_path=pf.path,
+                start_line=node.start_point[0] + 1,
+                end_line=node.end_point[0] + 1,
+                docstring=docstring,
+                signature=signature,
+                parent_class=parent_class,
+            )
+        )
 
         # Recurse into function body for nested calls
         if body:
-            self._walk_node(body, pf, parent_class, module_path)
+            self._walk_node(
+                body, pf, parent_class, parent_func=qname, module_path=module_path
+            )
 
     def _extract_import(self, node: Node, pf: ParsedFile) -> None:
         if node.type == "import_from_statement":
@@ -173,14 +228,16 @@ class TreeSitterParser:
                 child = children[i]
                 if child.type == "dotted_name":
                     name = self._node_text(child)
-                    pf.imports.append({
-                        "module_path": module_path.lstrip("."),
-                        "imported_name": name,
-                        "alias": None,
-                        "is_relative": is_relative,
-                        "relative_level": relative_level,
-                        "line_number": node.start_point[0] + 1,
-                    })
+                    pf.imports.append(
+                        {
+                            "module_path": module_path.lstrip("."),
+                            "imported_name": name,
+                            "alias": None,
+                            "is_relative": is_relative,
+                            "relative_level": relative_level,
+                            "line_number": node.start_point[0] + 1,
+                        }
+                    )
                     i += 1
                 elif child.type == "aliased_import":
                     # Handle "import X as Y" wrapper
@@ -188,14 +245,16 @@ class TreeSitterParser:
                     alias_node = child.child_by_field_name("alias")
                     name = self._node_text(name_node) if name_node else ""
                     alias = self._node_text(alias_node) if alias_node else None
-                    pf.imports.append({
-                        "module_path": module_path.lstrip("."),
-                        "imported_name": name,
-                        "alias": alias,
-                        "is_relative": is_relative,
-                        "relative_level": relative_level,
-                        "line_number": node.start_point[0] + 1,
-                    })
+                    pf.imports.append(
+                        {
+                            "module_path": module_path.lstrip("."),
+                            "imported_name": name,
+                            "alias": alias,
+                            "is_relative": is_relative,
+                            "relative_level": relative_level,
+                            "line_number": node.start_point[0] + 1,
+                        }
+                    )
                     i += 1
                 else:
                     i += 1
@@ -203,55 +262,76 @@ class TreeSitterParser:
             for child in node.children:
                 if child.type == "dotted_name":
                     name = self._node_text(child)
-                    pf.imports.append({
-                        "module_path": name,
-                        "imported_name": None,
-                        "alias": None,
-                        "is_relative": False,
-                        "relative_level": 0,
-                        "line_number": node.start_point[0] + 1,
-                    })
+                    pf.imports.append(
+                        {
+                            "module_path": name,
+                            "imported_name": None,
+                            "alias": None,
+                            "is_relative": False,
+                            "relative_level": 0,
+                            "line_number": node.start_point[0] + 1,
+                        }
+                    )
                 elif child.type == "aliased_import":
                     name_node = child.child_by_field_name("name")
                     alias_node = child.child_by_field_name("alias")
                     name = self._node_text(name_node) if name_node else ""
                     alias = self._node_text(alias_node) if alias_node else None
-                    pf.imports.append({
-                        "module_path": name,
-                        "imported_name": None,
-                        "alias": alias,
-                        "is_relative": False,
-                        "relative_level": 0,
-                        "line_number": node.start_point[0] + 1,
-                    })
+                    pf.imports.append(
+                        {
+                            "module_path": name,
+                            "imported_name": None,
+                            "alias": alias,
+                            "is_relative": False,
+                            "relative_level": 0,
+                            "line_number": node.start_point[0] + 1,
+                        }
+                    )
 
-    def _extract_call(self, node: Node, pf: ParsedFile, parent_class: str | None, module_path: str) -> None:
+    def _extract_call(
+        self,
+        node: Node,
+        pf: ParsedFile,
+        parent_class: str | None,
+        parent_func: str | None,
+        module_path: str,
+    ) -> None:
         func = node.child_by_field_name("function")
         if not func:
             return
+        caller_qname = parent_func or module_path
         if func.type == "identifier":
-            pf.calls.append({
-                "caller_class": parent_class,
-                "target": self._node_text(func),
-                "call_type": "direct",
-                "line_number": node.start_point[0] + 1,
-            })
+            pf.calls.append(
+                {
+                    "caller_class": parent_class,
+                    "caller_qname": caller_qname,
+                    "target": self._node_text(func),
+                    "call_type": "direct",
+                    "line_number": node.start_point[0] + 1,
+                }
+            )
         elif func.type == "attribute":
             parts = self._get_attribute_parts(func)
             if parts and parts[0] == "self":
-                pf.calls.append({
-                    "caller_class": parent_class,
-                    "target": parts[-1] if len(parts) > 1 else parts[0],
-                    "call_type": "self",
-                    "line_number": node.start_point[0] + 1,
-                })
+                pf.calls.append(
+                    {
+                        "caller_class": parent_class,
+                        "caller_qname": caller_qname,
+                        "target": parts[-1] if len(parts) > 1 else parts[0],
+                        "call_type": "self",
+                        "line_number": node.start_point[0] + 1,
+                    }
+                )
             else:
-                pf.calls.append({
-                    "caller_class": parent_class,
-                    "target": ".".join(parts) if parts else "",
-                    "call_type": "method",
-                    "line_number": node.start_point[0] + 1,
-                })
+                pf.calls.append(
+                    {
+                        "caller_class": parent_class,
+                        "caller_qname": caller_qname,
+                        "target": ".".join(parts) if parts else "",
+                        "call_type": "method",
+                        "line_number": node.start_point[0] + 1,
+                    }
+                )
 
     def _extract_docstring(self, body_node: Node | None) -> str | None:
         if not body_node or not body_node.children:
@@ -264,11 +344,11 @@ class TreeSitterParser:
                 # Strip string prefixes (f, b, r, rb, br, t for Python 3.12+)
                 for prefix in ("rb", "br", "f", "b", "r", "t"):
                     if text.startswith(prefix):
-                        text = text[len(prefix):]
+                        text = text[len(prefix) :]
                         break
                 for quote in ('"""', "'''", '"', "'"):
                     if text.startswith(quote) and text.endswith(quote):
-                        return text[len(quote):-len(quote)].strip()
+                        return text[len(quote) : -len(quote)].strip()
                 return text
         return None
 
@@ -294,5 +374,5 @@ class TreeSitterParser:
                     parts.extend(self._get_attribute_parts(func))
         return parts
 
-    def _to_module_path(self, path: Path) -> str:
-        return path_to_module(str(path))
+    def _to_module_path(self, path: Path, project_root: str | None = None) -> str:
+        return path_to_module(str(path), project_root=project_root or "")
