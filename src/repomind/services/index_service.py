@@ -211,6 +211,7 @@ class IndexService:
         self, parsed_files: list[ParsedFile], errors: list[str]
     ) -> int:
         total_calls = 0
+        unresolved_calls = 0
         try:
             # Clear old calls in SQLite to avoid duplication
             with self.sqlite._connect() as conn:
@@ -231,14 +232,38 @@ class IndexService:
                     callee_qname = SymbolResolver.resolve_callee(
                         call, call.get("caller_class"), symbol_index
                     )
+
+                    inserted = False
                     if caller_qname and callee_qname:
-                        self.sqlite.insert_call(
+                        call_type = call.get("call_type", "direct")
+                        confidence = 1.0
+
+                        target_name = call.get("target", "")
+                        if target_name.startswith("self."):
+                            call_type = "self_call"
+                            confidence = 0.95
+                        elif caller_qname.split(".")[0] == callee_qname.split(".")[0]:
+                            call_type = "same_module"
+                            confidence = 0.85
+                        else:
+                            call_type = "suffix_match"
+                            confidence = 0.60
+
+                        inserted = self.sqlite.insert_call(
                             caller_qname,
                             callee_qname,
-                            call.get("call_type", "direct"),
+                            call_type,
                             call.get("line_number"),
+                            confidence=confidence,
                         )
+
+                    if inserted:
                         total_calls += 1
+                    else:
+                        unresolved_calls += 1
+
+            self.sqlite.set_stat("resolved_calls", total_calls)
+            self.sqlite.set_stat("unresolved_calls", unresolved_calls)
         except Exception as e:
             errors.append(f"Failed to build call graph: {e}")
         return total_calls

@@ -105,6 +105,11 @@ CREATE INDEX IF NOT EXISTS idx_calls_confidence ON calls(confidence);
 CREATE INDEX IF NOT EXISTS idx_inherits_child ON inherits(child_id);
 CREATE INDEX IF NOT EXISTS idx_inherits_parent ON inherits(parent_id);
 CREATE INDEX IF NOT EXISTS idx_inherits_parent_name ON inherits(parent_name);
+
+CREATE TABLE IF NOT EXISTS indexing_stats (
+    key             TEXT    PRIMARY KEY,
+    value           INTEGER NOT NULL
+);
 """
 
 
@@ -112,7 +117,15 @@ class SQLiteStore:
     """SQLite-based structured storage for symbols, relations, and metadata."""
 
     _CLEARABLE_TABLES = frozenset(
-        {"inherits", "calls", "imports", "type_info", "symbols", "files"}
+        {
+            "inherits",
+            "calls",
+            "imports",
+            "type_info",
+            "symbols",
+            "files",
+            "indexing_stats",
+        }
     )
 
     def __init__(self, db_path: str = ".repomind/index.db"):
@@ -124,6 +137,25 @@ class SQLiteStore:
     def _init_db(self) -> None:
         with self._connect() as conn:
             conn.executescript(_SCHEMA_SQL)
+
+    def set_stat(self, key: str, value: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO indexing_stats (key, value) VALUES (?, ?)",
+                (key, value),
+            )
+
+    def get_stat(self, key: str, default: int = 0) -> int:
+        with self._read_connect() as conn:
+            table_exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='indexing_stats'"
+            ).fetchone()
+            if not table_exists:
+                return default
+            row = conn.execute(
+                "SELECT value FROM indexing_stats WHERE key = ?", (key,)
+            ).fetchone()
+            return row["value"] if row else default
 
     def _get_conn(self) -> sqlite3.Connection:
         """Get or create a reusable database connection."""
@@ -246,7 +278,11 @@ class SQLiteStore:
     def get_symbol_by_qualified_name(self, qualified_name: str) -> dict | None:
         with self._read_connect() as conn:
             row = conn.execute(
-                "SELECT * FROM symbols WHERE qualified_name = ?", (qualified_name,)
+                """SELECT s.*, f.path AS file_path 
+                   FROM symbols s 
+                   JOIN files f ON s.file_id = f.id 
+                   WHERE s.qualified_name = ?""",
+                (qualified_name,),
             ).fetchone()
             return dict(row) if row else None
 
@@ -254,14 +290,22 @@ class SQLiteStore:
         escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         with self._read_connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM symbols WHERE name LIKE ? ESCAPE '\\' OR qualified_name LIKE ? ESCAPE '\\' LIMIT ?",
+                """SELECT s.*, f.path AS file_path 
+                   FROM symbols s 
+                   JOIN files f ON s.file_id = f.id 
+                   WHERE s.name LIKE ? ESCAPE '\\' OR s.qualified_name LIKE ? ESCAPE '\\' 
+                   LIMIT ?""",
                 (f"%{escaped}%", f"%{escaped}%", limit),
             ).fetchall()
             return [dict(r) for r in rows]
 
     def get_all_symbols(self) -> list[dict]:
         with self._read_connect() as conn:
-            rows = conn.execute("SELECT * FROM symbols").fetchall()
+            rows = conn.execute(
+                """SELECT s.*, f.path AS file_path 
+                   FROM symbols s 
+                   JOIN files f ON s.file_id = f.id"""
+            ).fetchall()
             return [dict(r) for r in rows]
 
     # === Relation operations ===
@@ -273,7 +317,7 @@ class SQLiteStore:
         call_type: str,
         line_number: int | None = None,
         confidence: float = 1.0,
-    ) -> None:
+    ) -> bool:
         with self._connect() as conn:
             caller = conn.execute(
                 "SELECT id FROM symbols WHERE qualified_name = ?", (caller_qname,)
@@ -286,6 +330,8 @@ class SQLiteStore:
                     "INSERT INTO calls (caller_id, callee_id, call_type, confidence, line_number) VALUES (?, ?, ?, ?, ?)",
                     (caller["id"], callee["id"], call_type, confidence, line_number),
                 )
+                return True
+            return False
 
     def insert_import(
         self,
@@ -359,8 +405,10 @@ class SQLiteStore:
     def get_callees(self, caller_qname: str) -> list[dict]:
         with self._read_connect() as conn:
             rows = conn.execute(
-                """SELECT s.*, c.call_type, c.confidence, c.line_number
-                   FROM calls c JOIN symbols s ON c.callee_id = s.id
+                """SELECT s.*, f.path AS file_path, c.call_type, c.confidence, c.line_number
+                   FROM calls c 
+                   JOIN symbols s ON c.callee_id = s.id
+                   JOIN files f ON s.file_id = f.id
                    WHERE c.caller_id = (SELECT id FROM symbols WHERE qualified_name = ?)""",
                 (caller_qname,),
             ).fetchall()
@@ -369,8 +417,10 @@ class SQLiteStore:
     def get_callers(self, callee_qname: str) -> list[dict]:
         with self._read_connect() as conn:
             rows = conn.execute(
-                """SELECT s.*, c.call_type, c.confidence, c.line_number
-                   FROM calls c JOIN symbols s ON c.caller_id = s.id
+                """SELECT s.*, f.path AS file_path, c.call_type, c.confidence, c.line_number
+                   FROM calls c 
+                   JOIN symbols s ON c.caller_id = s.id
+                   JOIN files f ON s.file_id = f.id
                    WHERE c.callee_id = (SELECT id FROM symbols WHERE qualified_name = ?)""",
                 (callee_qname,),
             ).fetchall()
@@ -394,6 +444,12 @@ class SQLiteStore:
                 "cnt"
             ]
             calls = conn.execute("SELECT COUNT(*) as cnt FROM calls").fetchone()["cnt"]
+
+            resolved_calls = self.get_stat("resolved_calls", calls)
+            unresolved_calls = self.get_stat("unresolved_calls", 0)
+            total = resolved_calls + unresolved_calls
+            resolution_rate = (resolved_calls / total) if total > 0 else 1.0
+
             return {
                 "files": files,
                 "symbols": symbols,
@@ -401,6 +457,9 @@ class SQLiteStore:
                 "functions": functions,
                 "imports": imports,
                 "calls": calls,
+                "resolved_calls": resolved_calls,
+                "unresolved_calls": unresolved_calls,
+                "resolution_rate": resolution_rate,
             }
 
     def clear(self) -> None:
