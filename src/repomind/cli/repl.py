@@ -18,6 +18,10 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
+import litellm
+litellm.suppress_debug_info = True
+litellm.telemetry = False
+
 from repomind.cli.themes import REPOIND_THEME
 from repomind.cli.components import show_banner
 from repomind.cli.commands import registry
@@ -27,6 +31,22 @@ from repomind.cli.prompt_utils import (
     suggest_command,
     prompt_string,
 )
+
+
+class LazyServiceProxy:
+    """A proxy that delays the instantiation of a service until an attribute is accessed."""
+    def __init__(self, factory):
+        self._factory = factory
+        self._instance = None
+
+    def __getattr__(self, name):
+        if self._instance is None:
+            self._instance = self._factory()
+        return getattr(self._instance, name)
+
+    @property
+    def _is_initialized(self):
+        return self._instance is not None
 
 
 class RepoMindREPL:
@@ -49,16 +69,24 @@ class RepoMindREPL:
         self._register_commands()
 
     def _init_services(self) -> None:
-        """Initialize services for the current project."""
-        from repomind.services.index_service import IndexService
-        from repomind.services.query_service import QueryService
-        from repomind.services.rca_service import RCAService
-
+        """Initialize lazy service proxies for the current project."""
         index_dir = self.project / ".repomind"
 
-        self.index_service = IndexService(index_dir=str(index_dir))
-        self.query_service = QueryService(index_dir=str(index_dir))
-        self.rca_service = RCAService(index_dir=str(index_dir))
+        def make_index_service():
+            from repomind.services.index_service import IndexService
+            return IndexService(index_dir=str(index_dir))
+
+        def make_query_service():
+            from repomind.services.query_service import QueryService
+            return QueryService(index_dir=str(index_dir))
+
+        def make_rca_service():
+            from repomind.services.rca_service import RCAService
+            return RCAService(index_dir=str(index_dir))
+
+        self.index_service = LazyServiceProxy(make_index_service)
+        self.query_service = LazyServiceProxy(make_query_service)
+        self.rca_service = LazyServiceProxy(make_rca_service)
 
     def _register_commands(self) -> None:
         """Register all commands for the current project."""
@@ -76,6 +104,7 @@ class RepoMindREPL:
         from repomind.cli.commands.quit import register_quit_command
         from repomind.cli.commands.rca import register_rca_command
         from repomind.cli.commands.project import register_project_command
+        from repomind.cli.commands.ask import register_ask_command
 
         # Index completion callback updates the project registry
         def on_index_complete(result):
@@ -96,6 +125,7 @@ class RepoMindREPL:
             on_complete=on_index_complete,
         )
         register_query_command(self.console, self.project, self.query_service)
+        register_ask_command(self.console, self.project, self.query_service)
         register_show_command(self.console, self.project, self.query_service)
         register_graph_command(self.console, self.project, self.query_service)
         register_callers_command(self.console, self.project, self.query_service)
@@ -134,7 +164,18 @@ class RepoMindREPL:
     def _get_stats(self) -> dict | None:
         """Get index statistics, returning None if not indexed."""
         try:
-            stats = self.index_service.get_stats()
+            # Check if index_service is already initialized
+            if self.index_service._is_initialized:
+                stats = self.index_service.get_stats()
+            else:
+                # Use SQLiteStore directly to avoid heavy imports on startup
+                from repomind.storage.sqlite_store import SQLiteStore
+                index_db = self.project / ".repomind" / "index.db"
+                if not index_db.exists():
+                    return None
+                with SQLiteStore(str(index_db)) as store:
+                    stats = store.get_stats()
+            
             # Treat as "not indexed" if there are no files
             if not stats or stats.get("files", 0) == 0:
                 return None
@@ -230,7 +271,7 @@ class RepoMindREPL:
         Args:
             query: Query text
         """
-        cmd = registry.get("/query")
+        cmd = registry.get("/ask")
         if cmd:
             cmd.execute(query)
 

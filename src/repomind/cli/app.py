@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+os.environ["LITELLM_LOG"] = "ERROR"
+os.environ["SUPPRESS_LITELLM_DEBUG"] = "True"
+
 from pathlib import Path
 
 import typer

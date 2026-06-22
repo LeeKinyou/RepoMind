@@ -54,38 +54,42 @@ def show_call_graph(
         console.print()
         return
 
-    # Build adjacency list
-    adj: dict[str, list[str]] = {}
+    # Build forward and backward adjacency lists
+    fwd_adj: dict[str, list[str]] = {}
+    rev_adj: dict[str, list[str]] = {}
     for edge in graph.edges:
-        if edge.source not in adj:
-            adj[edge.source] = []
-        adj[edge.source].append(edge.target)
+        if edge.source not in fwd_adj:
+            fwd_adj[edge.source] = []
+        fwd_adj[edge.source].append(edge.target)
+        
+        if edge.target not in rev_adj:
+            rev_adj[edge.target] = []
+        rev_adj[edge.target].append(edge.source)
 
     node_map = {n.qualified_name: n for n in graph.nodes}
 
-    def build_tree(node_name: str, visited: set, current_depth: int) -> Tree:
-        node = node_map.get(node_name)
-        if node:
-            style = _get_node_style(node.type)
-            icon = _get_node_icon(node.type)
-            label = Text()
-            label.append(f"{icon} ", style=style)
-            label.append(node.name, style=style)
-            if node.qualified_name == root_symbol:
-                label.append("  (root)", style="bold yellow")
-        else:
-            label = Text(node_name, style="white")
-
-        tree = Tree(label)
-
-        if current_depth < depth and node_name in adj:
-            for child in adj[node_name]:
+    def build_tree(node_name: str, visited: set, current_depth: int, adj_list: dict) -> list[Tree]:
+        subtrees = []
+        if current_depth < depth and node_name in adj_list:
+            for child in adj_list[node_name]:
                 if child not in visited:
                     visited.add(child)
-                    subtree = build_tree(child, visited, current_depth + 1)
-                    tree.add(subtree)
+                    
+                    node = node_map.get(child)
+                    if node:
+                        style = _get_node_style(node.type)
+                        icon = _get_node_icon(node.type)
+                        label = Text()
+                        label.append(f"{icon} ", style=style)
+                        label.append(node.name, style=style)
+                    else:
+                        label = Text(child, style="white")
 
-        return tree
+                    tree = Tree(label)
+                    for st in build_tree(child, visited, current_depth + 1, adj_list):
+                        tree.add(st)
+                    subtrees.append(tree)
+        return subtrees
 
     # Find root node
     root_node = None
@@ -106,10 +110,39 @@ def show_call_graph(
     console.print(header)
     console.print(Rule(style="dim", characters="─"))
 
-    # Tree
-    visited = {root_node.qualified_name}
-    tree = build_tree(root_node.qualified_name, visited, 0)
-    console.print(tree)
+    # Create root tree
+    root_node_obj = node_map.get(root_node.qualified_name)
+    if root_node_obj:
+        style = _get_node_style(root_node_obj.type)
+        icon = _get_node_icon(root_node_obj.type)
+        root_label = Text()
+        root_label.append(f"{icon} ", style=style)
+        root_label.append(root_node_obj.name, style=style)
+    else:
+        root_label = Text(root_node.qualified_name, style="white")
+    root_label.append("  (root)", style="bold yellow")
+    
+    main_tree = Tree(root_label)
+    
+    # Callers
+    callers_label = Text("Callers (upstream)", style="dim italic")
+    callers_tree = Tree(callers_label)
+    caller_subtrees = build_tree(root_node.qualified_name, {root_node.qualified_name}, 0, rev_adj)
+    for st in caller_subtrees:
+        callers_tree.add(st)
+    if caller_subtrees:
+        main_tree.add(callers_tree)
+        
+    # Callees
+    callees_label = Text("Callees (downstream)", style="dim italic")
+    callees_tree = Tree(callees_label)
+    callee_subtrees = build_tree(root_node.qualified_name, {root_node.qualified_name}, 0, fwd_adj)
+    for st in callee_subtrees:
+        callees_tree.add(st)
+    if callee_subtrees:
+        main_tree.add(callees_tree)
+        
+    console.print(main_tree)
 
     # Stats footer
     stats = Text()
