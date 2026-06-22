@@ -98,6 +98,10 @@ def query(
     question: str = typer.Argument(..., help="Query question"),
     project: str = typer.Option(".", "--project", "-p", help="Project directory"),
     top_k: int = typer.Option(10, "--top", "-n", help="Number of results"),
+    answer: bool = typer.Option(False, "--answer", help="Ask LLM for a summary answer"),
+    show_code: bool = typer.Option(
+        False, "--show-code", help="Display matching code snippets"
+    ),
 ):
     """Query code repository."""
     from repomind.cli.repl import RepoMindREPL
@@ -109,11 +113,26 @@ def query(
     repl = RepoMindREPL(proj)
 
     with show_spinner(console, "Searching..."):
-        result = repl.query_service.search(question, QueryOptions(max_results=top_k))
+        result = repl.query_service.search(
+            question, QueryOptions(max_results=top_k, include_code=show_code)
+        )
 
     show_search_results(
-        console, question, result.symbols, result.elapsed_seconds, str(proj)
+        console,
+        question,
+        result.symbols,
+        result.elapsed_seconds,
+        str(proj),
+        show_code=show_code,
     )
+
+    if answer:
+        console.print()
+        console.print("  [bold cyan]LLM Answer Summary:[/bold cyan]")
+        with show_spinner(console, "Generating answer..."):
+            llm_ans = repl.query_service.answer(question, result)
+        console.print(f"  {llm_ans}")
+        console.print()
 
 
 @app.command()
@@ -151,6 +170,16 @@ def graph(
         console=console, project_path=proj, query_service=repl.query_service
     )
     cmd.execute(f"{name} --depth {depth}")
+
+
+@app.command("visualize")
+def visualize(
+    name: str = typer.Argument(..., help="Symbol name"),
+    project: str = typer.Option(".", "--project", "-p", help="Project directory"),
+    depth: int = typer.Option(2, "--depth", "-d", help="Expansion depth"),
+):
+    """View call graph (alias for graph command)."""
+    graph(name=name, project=project, depth=depth)
 
 
 @app.command()

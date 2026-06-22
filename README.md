@@ -7,7 +7,7 @@ RepoMind 是一款面向大型代码仓库的 **Repository Intelligence Platform
 ## 核心特性
 
 - **极速索引** — 基于 Tree-sitter 的纳秒级语法解析，10 万行项目 15 秒内完成全量索引
-- **混合检索** — BM25 关键字检索 + 向量语义检索 + 图拓扑 2-hop 扩展，精准召回率远超纯向量 RAG
+- **混合检索** — BM25 关键字检索 + 静态调用图拓扑 2-hop 扩展 + 多维 RRF 融合，有效提升代码召回精准度（向量语义检索处于 Roadmap 中）
 - **渐进式类型推断** — 6 策略级联推断算法，无需编译即可实现 70%+ 的 Python 类型推断准确率
 - **智能根因分析** — Stack Trace 逆向对齐 + 沙箱自愈验证，自动生成修复补丁并回归测试
 - **架构可视化** — 自动生成 Mermaid 调用图/依赖图，支持自定义展示层数，轻松理清调用脉络
@@ -100,7 +100,7 @@ RepoMind/
 │       │   ├── call_graph/     # 调用图构建
 │       │   └── retrieval/      # 混合检索引擎
 │       ├── models/             # 数据模型
-│       ├── storage/            # 存储层 (SQLite + LanceDB + NetworkX)
+│       ├── storage/            # 存储层 (SQLite + NetworkX，向量存储在开发中)
 │       ├── sandbox/            # 沙箱执行器
 │       └── utils/              # 工具函数
 ├── tests/                      # 测试目录
@@ -129,7 +129,7 @@ RepoMind/
 │       └── 用户使用手册.md
 └── .repomind/                  # 索引数据（运行时生成）
     ├── index.db                # SQLite 索引
-    ├── vectors.lance           # LanceDB 向量存储
+    ├── vectors.lance           # LanceDB 向量存储 (Roadmap)
     └── cache/                  # 缓存
 ```
 
@@ -141,7 +141,7 @@ RepoMind/
 | 语法解析 | py-tree-sitter | 纳秒级解析，语法容错 |
 | 类型推断 | Jedi | Python 静态分析引擎 |
 | 结构存储 | SQLite | 零配置单文件 |
-| 向量存储 | LanceDB | 无服务器，磁盘存储 |
+| 向量存储 | LanceDB (Roadmap) | 无服务器，磁盘存储 |
 | 图计算 | NetworkX | PageRank、Louvain、BFS |
 | LLM 接口 | LiteLLM | 一行切换本地/云端模型 |
 | CLI | Typer | 生产级命令行界面 |

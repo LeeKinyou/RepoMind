@@ -57,6 +57,9 @@ def show_index_stats(console: Console, stats: dict) -> None:
         ("functions", "Functions"),
         ("imports", "Imports"),
         ("calls", "Calls"),
+        ("resolved_calls", "Resolved Calls"),
+        ("unresolved_calls", "Unresolved Calls"),
+        ("resolution_rate", "Resolution Rate"),
     ]
 
     # Header
@@ -70,12 +73,15 @@ def show_index_stats(console: Console, stats: dict) -> None:
         padding=(0, 2),
         show_edge=False,
     )
-    table.add_column(style="dim", min_width=12)
+    table.add_column(style="dim", min_width=16)
     table.add_column(style="bold white")
 
     for key, label in items:
         if key in stats:
-            table.add_row(label, f"{stats[key]:,}")
+            if key == "resolution_rate":
+                table.add_row(label, f"{stats[key] * 100:.1f}%")
+            else:
+                table.add_row(label, f"{stats[key]:,}")
 
     console.print(table)
     console.print()
@@ -87,6 +93,7 @@ def show_search_results(
     results: list[SymbolInfo],
     elapsed: float,
     project_path: str = "",
+    show_code: bool = False,
 ) -> list[SymbolInfo]:
     """Display search results as a clean numbered list.
 
@@ -99,6 +106,7 @@ def show_search_results(
         results: Search result list
         elapsed: Elapsed seconds
         project_path: Project path (for relative path display)
+        show_code: Whether to show code snippets
 
     Returns:
         The results list (for interactive selection by the caller)
@@ -148,6 +156,20 @@ def show_search_results(
             doc_line = Text()
             doc_line.append(f"      {doc}", style="dim italic")
             console.print(doc_line)
+
+        # Code snippet (if requested and present)
+        if show_code and sym.snippet:
+            syntax = Syntax(
+                sym.snippet,
+                "python",
+                theme="monokai",
+                line_numbers=True,
+                start_line=sym.start_line,
+                background_color="default",
+            )
+            console.print("      [dim]Code snippet:[/dim]")
+            console.print(syntax)
+            console.print()
 
     console.print()
     # Footer hint
