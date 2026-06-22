@@ -114,3 +114,7 @@ class CallGraphBuilder:
 
     def get_graph(self) -> GraphStore:
         return self.graph
+
+    @property
+    def symbol_index(self) -> dict[str, list[str]]:
+        return self._symbol_index

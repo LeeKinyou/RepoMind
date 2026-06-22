@@ -71,12 +71,8 @@ class IndexService:
                 db_path_posix = PurePosixPath(db_file["path"]).as_posix()
                 if db_path_posix not in active_rel_paths:
                     # Find symbols in this file to remove from GraphStore
-                    with self.sqlite._read_connect() as conn:
-                        rows = conn.execute(
-                            "SELECT qualified_name FROM symbols WHERE file_id = ?",
-                            (db_file["id"],),
-                        ).fetchall()
-                        symbol_qnames = [r["qualified_name"] for r in rows]
+                    symbols = self.sqlite.get_symbols_by_file_id(db_file["id"])
+                    symbol_qnames = [s["qualified_name"] for s in symbols]
                     for qname in symbol_qnames:
                         if qname in self.graph.graph:
                             self.graph.graph.remove_node(qname)
@@ -89,17 +85,21 @@ class IndexService:
         parsed_files, skipped = self._parse_files(py_files, project_path, errors)
 
         # 4. Store files and symbols (includes type inference and idempotency check)
-        total_symbols, total_classes, total_functions = (
+        total_symbols, total_classes, total_functions, symbols_to_embed = (
             self._store_symbols_and_metadata(parsed_files, project_path, errors)
         )
 
-        # 5. Build and store call graph (clears calls first)
+        # 5. Generate and store embeddings for new/updated symbols
+        if symbols_to_embed:
+            self._generate_embeddings(symbols_to_embed, errors)
+
+        # 6. Build and store call graph (clears calls first)
         total_calls = self._build_and_store_call_graph(parsed_files, errors)
 
-        # 6. Store inheritance relations (clears inherits first)
+        # 7. Store inheritance relations (clears inherits first)
         self._store_inheritance(parsed_files, errors)
 
-        # 7. Persist call graph
+        # 8. Persist call graph
         try:
             self.graph.save(str(self.index_dir / "graph.json"))
         except Exception as e:
@@ -140,10 +140,11 @@ class IndexService:
 
     def _store_symbols_and_metadata(
         self, parsed_files: list[ParsedFile], project_path: Path, errors: list[str]
-    ) -> tuple[int, int, int]:
+    ) -> tuple[int, int, int, list[tuple[int, str]]]:
         total_symbols = 0
         total_classes = 0
         total_functions = 0
+        symbols_to_embed = []
         from repomind.models.schemas import SymbolType
 
         for pf in parsed_files:
@@ -176,6 +177,9 @@ class IndexService:
 
                 for sym in pf.symbols:
                     sym_id = self.sqlite.insert_symbol(sym, file_id)
+                    text_for_embedding = f"{sym.name} {sym.qualified_name} {sym.docstring or ''}"
+                    symbols_to_embed.append((sym_id, text_for_embedding))
+                    
                     # Type inference
                     source = pf.source.decode("utf-8", errors="replace")
                     inferred = self.type_engine.infer_symbol(sym, source)
@@ -205,7 +209,50 @@ class IndexService:
                     )
             except Exception as e:
                 errors.append(f"Failed to store {pf.path}: {e}")
-        return total_symbols, total_classes, total_functions
+        return total_symbols, total_classes, total_functions, symbols_to_embed
+
+    def _generate_embeddings(self, new_symbols: list[tuple[int, str]], errors: list[str]) -> None:
+        if not new_symbols:
+            return
+        try:
+            from repomind.utils.config import load_config
+            import litellm
+            
+            config = load_config()
+            model = config.llm.embedding_model
+            if not model:
+                return
+            
+            litellm_args = {}
+            if config.llm.api_key:
+                litellm_args["api_key"] = config.llm.api_key
+            if config.llm.base_url:
+                litellm_args["base_url"] = config.llm.base_url
+            
+            inputs = [text for _, text in new_symbols]
+            batch_size = 100
+            
+            for i in range(0, len(inputs), batch_size):
+                batch_inputs = inputs[i:i+batch_size]
+                batch_ids = [sid for sid, _ in new_symbols[i:i+batch_size]]
+                
+                try:
+                    response = litellm.embedding(
+                        model=model,
+                        input=batch_inputs,
+                        **litellm_args
+                    )
+                    
+                    if i == 0 and response.data:
+                        dim = len(response.data[0]["embedding"])
+                        self.sqlite.init_vector_table(dim)
+                    
+                    for j, data in enumerate(response.data):
+                        self.sqlite.insert_embedding(batch_ids[j], data["embedding"])
+                except Exception as e:
+                    errors.append(f"Embedding batch failed: {e}")
+        except Exception as e:
+            errors.append(f"Failed to generate embeddings: {e}")
 
     def _build_and_store_call_graph(
         self, parsed_files: list[ParsedFile], errors: list[str]
@@ -214,17 +261,13 @@ class IndexService:
         unresolved_calls = 0
         try:
             # Clear old calls in SQLite to avoid duplication
-            with self.sqlite._connect() as conn:
-                conn.execute("DELETE FROM calls")
+            self.sqlite.delete_all_calls()
 
             # Rebuild graph store completely
             self.graph.clear()
             self.call_graph_builder.build(parsed_files)
 
-            symbol_index: dict[str, list[str]] = {}
-            for pf in parsed_files:
-                for sym in pf.symbols:
-                    symbol_index.setdefault(sym.name, []).append(sym.qualified_name)
+            symbol_index = self.call_graph_builder.symbol_index
 
             for pf in parsed_files:
                 for call in pf.calls:
@@ -272,8 +315,7 @@ class IndexService:
         self, parsed_files: list[ParsedFile], errors: list[str]
     ) -> None:
         try:
-            with self.sqlite._connect() as conn:
-                conn.execute("DELETE FROM inherits")
+            self.sqlite.delete_all_inherits()
         except Exception as e:
             errors.append(f"Failed to clear old inheritance relations: {e}")
 

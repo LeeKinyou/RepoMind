@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import logging
+import time
+from repomind.utils.errors import QueryError
+
+logger = logging.getLogger(__name__)
 
 from repomind.models.schemas import (
     QueryOptions,
@@ -26,11 +31,8 @@ class QueryService:
         graph: GraphStore | None = None,
         retriever: HybridRetriever | None = None,
     ):
-        import logging
         from repomind.utils.config import load_config
         from repomind.utils.errors import GraphLoadError
-
-        logger = logging.getLogger(__name__)
         if index_dir is None:
             index_dir = load_config().index_dir
         self.sqlite = sqlite or SQLiteStore(str(Path(index_dir) / "index.db"))
@@ -60,11 +62,6 @@ class QueryService:
 
     def search(self, query: str, options: QueryOptions | None = None) -> QueryResult:
         """Execute local hybrid retrieval query without LLM calls."""
-        import time
-        import logging
-        from repomind.utils.errors import QueryError
-
-        logger = logging.getLogger(__name__)
         start = time.time()
         options = options or QueryOptions()
 
@@ -117,11 +114,8 @@ class QueryService:
 
     def answer(self, query: str, query_res: QueryResult) -> str:
         """Generate LLM summary answering the query based on retrieved contexts."""
-        import logging
         import litellm
         from repomind.utils.config import load_config
-
-        logger = logging.getLogger(__name__)
         config = load_config()
         model_name = config.llm.model or "claude-sonnet-4-6"
 

@@ -46,7 +46,7 @@ class TestStartupBanner:
 
         output = stream.getvalue()
         assert "RepoMind" in output
-        assert "workspace" in output
+        assert "WORKSPACE" in output
         assert "index ready" in output
         assert "42 files" in output
         assert "318 symbols" in output
@@ -71,7 +71,7 @@ class TestStartupBanner:
             project_name="a-very-long-project-name",
         )
 
-        assert "____" in stream.getvalue()
+        assert "██" in stream.getvalue()
 
     def test_banner_is_centered_and_does_not_fill_wide_terminal(self, tmp_path: Path):
         console, stream = capture_console(width=100)
@@ -84,11 +84,11 @@ class TestStartupBanner:
         )
 
         lines = stream.getvalue().splitlines()
-        brand_line = next(line for line in lines if "____" in line)
-        panel_top = next(line for line in lines if "workspace" in line)
+        brand_line = next(line for line in lines if "██" in line)
+        panel_top = next(line for line in lines if "WORKSPACE" in line)
         assert len(brand_line) - len(brand_line.lstrip()) >= 10
         assert len(panel_top) - len(panel_top.lstrip()) >= 10
-        assert len(panel_top.strip()) <= 72
+        assert len(panel_top.strip()) <= 76
 
 
 class TestStartupDashboard:

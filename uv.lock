@@ -1384,7 +1384,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "rich" },
-    { name = "sqlite-vec" },
     { name = "tree-sitter" },
     { name = "tree-sitter-python" },
     { name = "typer" },
@@ -1397,6 +1396,9 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+]
+vector = [
+    { name = "sqlite-vec" },
 ]
 
 [package.metadata]
@@ -1413,12 +1415,12 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1.0" },
-    { name = "sqlite-vec", specifier = ">=0.1.0" },
+    { name = "sqlite-vec", marker = "extra == 'vector'", specifier = ">=0.1.0" },
     { name = "tree-sitter", specifier = ">=0.21.0" },
     { name = "tree-sitter-python", specifier = ">=0.21.0" },
     { name = "typer", specifier = ">=0.9.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "vector"]
 
 [[package]]
 name = "requests"

@@ -5,13 +5,12 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from pydantic import BaseModel, Field
-
-
-# === 枚举类型 ===
-
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# === 枚举类型 ===
 
 
 class SymbolType(str, Enum):
@@ -158,6 +157,7 @@ class RCAResult(BaseModel):
     call_chain: list[str] = Field(default_factory=list)
     explanation: str = ""
     suggested_fix: str | None = None
+    # Deprecated: use evidences instead
     evidence: list[str] = Field(default_factory=list)
     evidences: list[EvidenceItem] = Field(default_factory=list)
     verification_command: str | None = None

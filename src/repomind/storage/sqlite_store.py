@@ -116,16 +116,14 @@ CREATE TABLE IF NOT EXISTS indexing_stats (
 class SQLiteStore:
     """SQLite-based structured storage for symbols, relations, and metadata."""
 
-    _CLEARABLE_TABLES = frozenset(
-        {
-            "inherits",
-            "calls",
-            "imports",
-            "type_info",
-            "symbols",
-            "files",
-            "indexing_stats",
-        }
+    _CLEARABLE_TABLES = (
+        "inherits",
+        "calls",
+        "imports",
+        "type_info",
+        "symbols",
+        "files",
+        "indexing_stats",
     )
 
     def __init__(self, db_path: str = ".repomind/index.db"):
@@ -137,6 +135,17 @@ class SQLiteStore:
     def _init_db(self) -> None:
         with self._connect() as conn:
             conn.executescript(_SCHEMA_SQL)
+
+    def init_vector_table(self, dimension: int) -> None:
+        """Dynamically create the virtual vector table with the specified dimension."""
+        with self._connect() as conn:
+            # Drop the table if it exists but has a different dimension
+            # (sqlite-vec doesn't allow altering vec0 tables easily)
+            # To be safe, we'll try to create it. If it fails due to dimension mismatch,
+            # we don't handle it gracefully yet, but usually it's cleared on full re-index.
+            conn.execute(
+                f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_symbols USING vec0(symbol_id INTEGER PRIMARY KEY, embedding float[{dimension}]);"
+            )
 
     def set_stat(self, key: str, value: int) -> None:
         with self._connect() as conn:
@@ -160,8 +169,12 @@ class SQLiteStore:
     def _get_conn(self) -> sqlite3.Connection:
         """Get or create a reusable database connection."""
         if self._conn is None:
+            import sqlite_vec
             self._conn = sqlite3.connect(str(self.db_path))
             self._conn.row_factory = sqlite3.Row
+            self._conn.enable_load_extension(True)
+            sqlite_vec.load(self._conn)
+            self._conn.enable_load_extension(False)
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA foreign_keys=ON")
         return self._conn
@@ -226,7 +239,8 @@ class SQLiteStore:
                     file_info.size_bytes,
                 ),
             )
-            assert cur.lastrowid is not None
+            if cur.lastrowid is None:
+                raise RuntimeError("INSERT did not return a row ID")
             return cur.lastrowid
 
     def get_file_by_path(self, path: str) -> dict | None:
@@ -272,7 +286,8 @@ class SQLiteStore:
                     parent_id,
                 ),
             )
-            assert cur.lastrowid is not None
+            if cur.lastrowid is None:
+                raise RuntimeError("INSERT did not return a row ID")
             return cur.lastrowid
 
     def get_symbol_by_qualified_name(self, qualified_name: str) -> dict | None:
@@ -298,6 +313,40 @@ class SQLiteStore:
                 (f"%{escaped}%", f"%{escaped}%", limit),
             ).fetchall()
             return [dict(r) for r in rows]
+
+    def insert_embedding(self, symbol_id: int, embedding: list[float]) -> None:
+        """Insert a vector embedding for a symbol."""
+        with self._connect() as conn:
+            import json
+            # Table might not exist if init_vector_table wasn't called yet
+            try:
+                conn.execute(
+                    "INSERT OR REPLACE INTO vec_symbols (symbol_id, embedding) VALUES (?, ?)",
+                    (symbol_id, json.dumps(embedding)),
+                )
+            except sqlite3.OperationalError:
+                pass
+
+    def search_vectors(self, query_embedding: list[float], limit: int = 10) -> list[dict]:
+        """Search for similar symbols using L2 distance."""
+        with self._read_connect() as conn:
+            import json
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT s.*, f.path AS file_path, v.distance
+                    FROM vec_symbols v
+                    JOIN symbols s ON v.symbol_id = s.id
+                    JOIN files f ON s.file_id = f.id
+                    WHERE embedding MATCH ? AND k = ?
+                    ORDER BY distance
+                    """,
+                    (json.dumps(query_embedding), limit)
+                ).fetchall()
+                return [dict(r) for r in rows]
+            except sqlite3.OperationalError:
+                # Table might not exist
+                return []
 
     def get_all_symbols(self) -> list[dict]:
         with self._read_connect() as conn:
@@ -399,7 +448,8 @@ class SQLiteStore:
                     evidence,
                 ),
             )
-            assert cur.lastrowid is not None
+            if cur.lastrowid is None:
+                raise RuntimeError("INSERT did not return a row ID")
             return cur.lastrowid
 
     def get_callees(self, caller_qname: str) -> list[dict]:
@@ -462,7 +512,29 @@ class SQLiteStore:
                 "resolution_rate": resolution_rate,
             }
 
+    def delete_all_calls(self) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM calls")
+
+    def delete_all_inherits(self) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM inherits")
+
+    def get_symbols_by_file_id(self, file_id: int) -> list[dict]:
+        with self._read_connect() as conn:
+            rows = conn.execute("SELECT qualified_name FROM symbols WHERE file_id = ?", (file_id,)).fetchall()
+            return [dict(r) for r in rows]
+
+    def search_files_by_suffix(self, suffix: str) -> list[dict]:
+        with self._read_connect() as conn:
+            rows = conn.execute("SELECT path FROM files WHERE path LIKE ?", (f"%{suffix}",)).fetchall()
+            return [dict(r) for r in rows]
+
     def clear(self) -> None:
         with self._connect() as conn:
             for table in self._CLEARABLE_TABLES:
                 conn.execute(f"DELETE FROM {table}")
+            try:
+                conn.execute("DROP TABLE IF EXISTS vec_symbols")
+            except sqlite3.OperationalError:
+                pass

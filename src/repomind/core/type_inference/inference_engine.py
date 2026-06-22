@@ -186,6 +186,9 @@ class TypeInferenceEngine:
                 cls = match.group(1)
                 if cls[0].isupper():
                     return cls
+                import builtins
+                if hasattr(builtins, cls):
+                    return cls
         return None
 
     def _strategy_jedi(

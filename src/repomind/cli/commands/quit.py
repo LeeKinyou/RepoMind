@@ -1,5 +1,6 @@
 """Quit command for RepoMind CLI."""
 
+from typing import Any
 from dataclasses import dataclass, field
 
 from repomind.cli.commands import registry
@@ -14,8 +15,8 @@ class QuitCommand:
     description: str = "Exit program"
 
     # Dependencies
-    console: any = None
-    quit_callback: any = None
+    console: Any = None
+    quit_callback: Any = None
 
     def execute(self, args: str) -> None:
         """Execute quit command.

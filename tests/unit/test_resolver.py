@@ -37,7 +37,7 @@ class TestResolveCallee:
         call = {"target": "foo", "call_type": "direct"}
         index = {"bar": ["pkg.module.foo"]}
         result = SymbolResolver.resolve_callee(call, None, index)
-        assert result == "pkg.module.foo"
+        assert result == "foo"
 
     def test_not_in_index_returns_target(self):
         call = {"target": "external_func", "call_type": "direct"}

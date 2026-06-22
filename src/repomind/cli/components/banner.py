@@ -15,7 +15,7 @@ from rich.text import Text
 WORDMARK_TOP = "R E P O"
 WORDMARK_BOTTOM = "M I N D"
 TAGLINE = "understand the code before changing it"
-MAX_CONTENT_WIDTH = 68
+MAX_CONTENT_WIDTH = 76
 
 
 def _status_table(
@@ -61,27 +61,27 @@ def show_banner(
 
     console.print()
     logo_lines = [
-        "    [bold cyan]____                       __  ____[/bold cyan][bold magenta]            __[/bold magenta]",
-        "   [bold cyan]/ __ \\___  ____  ____  ____/  |/  (_)[/bold cyan][bold magenta]___  ____/ /[/bold magenta]",
-        "  [bold cyan]/ /_/ / _ \\/ __ \\/ __ \\/ __  /|_/ / /[/bold cyan][bold magenta] __ \\/ __  /[/bold magenta]",
-        " [bold cyan]/ _, _/  __/ /_/ / /_/ / /_/ /  / / / /[/bold cyan][bold magenta] / / / /_/ /[/bold magenta]",
-        "[bold cyan]/_/ |_|\\___/ .___/\\____/\\__,_/_/  /_/_/[/bold cyan][bold magenta] /_/\\__,_/[/bold magenta]",
-        "          [bold cyan]/_/[/bold cyan]",
+        "[bold #2563eb]██████[/][bold #1e3a8a]╗ [/][bold #2563eb]███████[/][bold #1e3a8a]╗[/][bold #2563eb]██████[/][bold #1e3a8a]╗  [/][bold #2563eb]██████[/][bold #1e3a8a]╗ [/][bold #059669]███[/][bold #064e3b]╗   [/][bold #059669]███[/][bold #064e3b]╗[/][bold #059669]██[/][bold #064e3b]╗[/][bold #059669]███[/][bold #064e3b]╗   [/][bold #059669]██[/][bold #064e3b]╗[/][bold #059669]██████[/][bold #064e3b]╗ [/]",
+        "[bold #2563eb]██[/][bold #1e3a8a]╔══[/][bold #2563eb]██[/][bold #1e3a8a]╗[/][bold #2563eb]██[/][bold #1e3a8a]╔════╝[/][bold #2563eb]██[/][bold #1e3a8a]╔══[/][bold #2563eb]██[/][bold #1e3a8a]╗[/][bold #2563eb]██[/][bold #1e3a8a]╔═══[/][bold #2563eb]██[/][bold #1e3a8a]╗[/][bold #059669]████[/][bold #064e3b]╗ [/][bold #059669]████[/][bold #064e3b]║[/][bold #059669]██[/][bold #064e3b]║[/][bold #059669]████[/][bold #064e3b]╗  [/][bold #059669]██[/][bold #064e3b]║[/][bold #059669]██[/][bold #064e3b]╔══[/][bold #059669]██[/][bold #064e3b]╗[/]",
+        "[bold #2563eb]██████[/][bold #1e3a8a]╔╝[/][bold #2563eb]█████[/][bold #1e3a8a]╗  [/][bold #2563eb]██████[/][bold #1e3a8a]╔╝[/][bold #2563eb]██[/][bold #1e3a8a]║   [/][bold #2563eb]██[/][bold #1e3a8a]║[/][bold #059669]██[/][bold #064e3b]╔[/][bold #059669]████[/][bold #064e3b]╔[/][bold #059669]██[/][bold #064e3b]║[/][bold #059669]██[/][bold #064e3b]║[/][bold #059669]██[/][bold #064e3b]╔[/][bold #059669]██[/][bold #064e3b]╗ [/][bold #059669]██[/][bold #064e3b]║[/][bold #059669]██[/][bold #064e3b]║  [/][bold #059669]██[/][bold #064e3b]║[/]",
+        "[bold #2563eb]██[/][bold #1e3a8a]╔══[/][bold #2563eb]██[/][bold #1e3a8a]╗[/][bold #2563eb]██[/][bold #1e3a8a]╔══╝  [/][bold #2563eb]██[/][bold #1e3a8a]╔═══╝ [/][bold #2563eb]██[/][bold #1e3a8a]║   [/][bold #2563eb]██[/][bold #1e3a8a]║[/][bold #059669]██[/][bold #064e3b]║╚[/][bold #059669]██[/][bold #064e3b]╔╝[/][bold #059669]██[/][bold #064e3b]║[/][bold #059669]██[/][bold #064e3b]║[/][bold #059669]██[/][bold #064e3b]║╚[/][bold #059669]██[/][bold #064e3b]╗[/][bold #059669]██[/][bold #064e3b]║[/][bold #059669]██[/][bold #064e3b]║  [/][bold #059669]██[/][bold #064e3b]║[/]",
+        "[bold #2563eb]██[/][bold #1e3a8a]║  [/][bold #2563eb]██[/][bold #1e3a8a]║[/][bold #2563eb]███████[/][bold #1e3a8a]╗[/][bold #2563eb]██[/][bold #1e3a8a]║     ╚[/][bold #2563eb]██████[/][bold #1e3a8a]╔╝[/][bold #059669]██[/][bold #064e3b]║ ╚═╝ [/][bold #059669]██[/][bold #064e3b]║[/][bold #059669]██[/][bold #064e3b]║[/][bold #059669]██[/][bold #064e3b]║ ╚[/][bold #059669]████[/][bold #064e3b]║[/][bold #059669]██████[/][bold #064e3b]╔╝[/]",
+        "[bold #1e3a8a]╚═╝  ╚═╝╚══════╝╚═╝      ╚═════╝ [/][bold #064e3b]╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═════╝ [/]",
     ]
     for line in logo_lines:
         console.print(Align.center(Text.from_markup(line)))
 
-    console.print(Align.center(Text(TAGLINE, style="tagline")))
+    console.print(Align.center(Text(TAGLINE, style="italic dim white")))
     console.print()
     console.print(
         Align.center(
             Panel(
                 _status_table(project_path, name, stats),
-                title="[panel.title] workspace [/panel.title]",
-                title_align="left",
-                border_style="panel.border",
-                padding=(0, 1),
-                box=box.ROUNDED,
+                title="[panel.title] WORKSPACE [/panel.title]",
+                title_align="center",
+                border_style="bold #10b981",
+                padding=(1, 2),
+                box=box.DOUBLE_EDGE,
                 width=content_width,
             )
         )

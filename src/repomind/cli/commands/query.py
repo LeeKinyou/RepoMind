@@ -1,6 +1,7 @@
 """Query command for RepoMind CLI."""
 
 from pathlib import Path
+from typing import Any
 from dataclasses import dataclass, field
 
 from rich.text import Text
@@ -19,9 +20,9 @@ class QueryCommand:
     description: str = "Search symbols by natural language or keyword"
 
     # Dependencies
-    console: any = None
+    console: Any = None
     project_path: Path = None
-    query_service: any = None
+    query_service: Any = None
     interactive: bool = True  # enable interactive number selection
 
     def execute(self, args: str) -> None:

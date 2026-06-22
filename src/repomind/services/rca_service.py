@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import re
+import re
+import logging
+import litellm
 from dataclasses import dataclass
 from pathlib import Path
+from repomind.utils.config import load_config
+
+logger = logging.getLogger(__name__)
 
 from repomind.models.schemas import (
     RCAResult,
@@ -36,11 +42,8 @@ class RCAService:
         sqlite: SQLiteStore | None = None,
         graph: GraphStore | None = None,
     ):
-        import logging
         from repomind.utils.config import load_config
         from repomind.utils.errors import GraphLoadError
-
-        logger = logging.getLogger(__name__)
         if index_dir is None:
             index_dir = load_config().index_dir
         self.index_dir = index_dir
@@ -79,11 +82,8 @@ class RCAService:
         if filename:
             try:
                 # Query SQLite files table to see if we have files matching this suffix or name
-                with self.sqlite._read_connect() as conn:
-                    rows = conn.execute(
-                        "SELECT path FROM files WHERE path LIKE ?", (f"%{filename}",)
-                    ).fetchall()
-                    if rows:
+                rows = self.sqlite.search_files_by_suffix(filename)
+                if rows:
                         # Return the shortest match or first match
                         for row in rows:
                             p = row["path"]
@@ -118,12 +118,6 @@ class RCAService:
 
     def analyze_trace(self, trace: str) -> RCAResult:
         """Parse stack trace and find root cause."""
-        import logging
-        import litellm
-        from repomind.utils.config import load_config
-
-        logger = logging.getLogger(__name__)
-
         # Parse stack trace
         frames = self._parse_trace(trace)
         if not frames:
@@ -317,7 +311,7 @@ class RCAService:
         """Parse Python stack trace into call frames."""
         frames = []
         # Match "File "path", line N, in func_name"
-        pattern = r'File "([^"]+)", line (\d+), in (\w+)'
+        pattern = r'File "([^"]+)", line (\d+), in (.+)'
         for match in re.finditer(pattern, trace):
             file_path = match.group(1)
             line_num = int(match.group(2))

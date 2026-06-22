@@ -341,8 +341,8 @@ class TreeSitterParser:
             expr = first.children[0]
             if expr.type == "string":
                 text = self._node_text(expr)
-                # Strip string prefixes (f, b, r, rb, br, t for Python 3.12+)
-                for prefix in ("rb", "br", "f", "b", "r", "t"):
+                # Strip string prefixes (f, b, r, rb, br, t, u, rf, fr, tb, bt for Python 3.12+)
+                for prefix in ("rb", "br", "rf", "fr", "tb", "bt", "f", "b", "r", "t", "u"):
                     if text.startswith(prefix):
                         text = text[len(prefix) :]
                         break

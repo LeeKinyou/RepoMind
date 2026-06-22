@@ -74,6 +74,10 @@ class MCPServer:
                 "id": msg_id,
             }
 
+        # Handle ping
+        if method == "ping":
+            return {"jsonrpc": "2.0", "result": {}, "id": msg_id}
+
         # 2. Block requests if not initialized
         if not self.initialized:
             return self._make_error_response(msg_id, -32002, "Server not initialized")
@@ -105,9 +109,9 @@ class MCPServer:
 
             if tool_name in ("repomind.index_repo", "repomind_index_repo"):
                 incremental = arguments.get("incremental", False)
-                service = IndexService(index_dir=index_dir)
+                index_svc = IndexService(index_dir=index_dir)
                 opts = IndexOptions(incremental=incremental)
-                res = service.index_directory(repo_path, options=opts)
+                res = index_svc.index_directory(repo_path, options=opts)
 
                 content_text = (
                     f"Indexing completed successfully!\n"
@@ -134,9 +138,9 @@ class MCPServer:
                         f"Index database not found in {index_dir}. Please run 'repomind.index_repo' first.",
                     )
 
-                service = QueryService(index_dir=index_dir)
+                query_svc = QueryService(index_dir=index_dir)
                 opts = QueryOptions(max_results=max_results)
-                res = service.search(query, options=opts)
+                res = query_svc.search(query, options=opts)
 
                 content_text = f"### AI Answer:\n{res.answer}\n\n### Matched Symbols:\n"
                 for sym in res.symbols:
@@ -161,8 +165,8 @@ class MCPServer:
                         f"Index database not found in {index_dir}. Please run 'repomind.index_repo' first.",
                     )
 
-                service = QueryService(index_dir=index_dir)
-                res = service.get_call_graph(qualified_name, depth=depth)
+                query_svc2 = QueryService(index_dir=index_dir)
+                res = query_svc2.get_call_graph(qualified_name, depth=depth)
 
                 content_text = (
                     f"### Call Graph for `{qualified_name}` (Depth: {depth})\n"
@@ -184,8 +188,8 @@ class MCPServer:
                         f"Index database not found in {index_dir}. Please run 'repomind.index_repo' first.",
                     )
 
-                service = RCAService(index_dir=index_dir)
-                res = service.analyze_trace(trace)
+                rca_svc = RCAService(index_dir=index_dir)
+                res = rca_svc.analyze_trace(trace)
 
                 # Format using EvidenceReporter
                 md_report = EvidenceReporter.generate_markdown_report(
@@ -303,8 +307,6 @@ class MCPServer:
         }
 
     def _send_error(self, msg_id: int | None, code: int, message: str) -> None:
-        err = {"jsonrpc": "2.0", "error": {"code": code, "message": message}}
-        if msg_id is not None:
-            err["id"] = msg_id
+        err = {"jsonrpc": "2.0", "error": {"code": code, "message": message}, "id": msg_id}
         sys.stdout.write(json.dumps(err) + "\n")
         sys.stdout.flush()

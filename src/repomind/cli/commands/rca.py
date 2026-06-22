@@ -1,6 +1,7 @@
 """RCA command for RepoMind CLI."""
 
 from pathlib import Path
+from typing import Any
 from dataclasses import dataclass, field
 
 from rich.text import Text
@@ -19,9 +20,9 @@ class RCACommand:
     description: str = "Root cause analysis from stack trace"
 
     # Dependencies
-    console: any = None
+    console: Any = None
     project_path: Path = None
-    rca_service: any = None
+    rca_service: Any = None
 
     def execute(self, args: str) -> None:
         """Execute RCA command.

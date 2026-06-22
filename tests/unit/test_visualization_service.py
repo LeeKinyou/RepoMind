@@ -49,8 +49,8 @@ class TestVisualizationService:
         # Check standard prefix
         assert "graph TD" in mermaid
         # Check node shapes are correctly applied
-        assert "pkg_mod_foo_func__[Func]" in mermaid
-        assert "pkg_mod_bar_func__(Method)" in mermaid
+        assert 'pkg_mod_foo_func__["foo"]' in mermaid
+        assert 'pkg_mod_bar_func__("bar")' in mermaid
         # Check connection edges are generated with sanitized IDs
         assert "pkg_mod_foo_func__ -->|calls| pkg_mod_bar_func__" in mermaid
 
@@ -68,6 +68,6 @@ class TestVisualizationService:
 
     def test_node_shape_detection(self):
         service = VisualizationService()
-        assert service._node_shape(SymbolType.CLASS) == "[Class]"
-        assert service._node_shape(SymbolType.METHOD) == "(Method)"
-        assert service._node_shape(SymbolType.FUNCTION) == "[Func]"
+        assert service._node_shape(SymbolType.CLASS, "MyClass") == '["MyClass"]'
+        assert service._node_shape(SymbolType.METHOD, "MyMethod") == '("MyMethod")'
+        assert service._node_shape(SymbolType.FUNCTION, "MyFunc") == '["MyFunc"]'

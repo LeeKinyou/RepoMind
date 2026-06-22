@@ -1,6 +1,7 @@
 """Stats command for RepoMind CLI."""
 
 from pathlib import Path
+from typing import Any
 from dataclasses import dataclass, field
 
 from rich.text import Text
@@ -18,9 +19,9 @@ class StatsCommand:
     description: str = "Show index statistics"
 
     # Dependencies
-    console: any = None
+    console: Any = None
     project_path: Path = None
-    index_service: any = None
+    index_service: Any = None
 
     def execute(self, args: str) -> None:
         """Execute stats command.

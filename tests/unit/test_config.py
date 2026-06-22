@@ -39,6 +39,8 @@ class TestLoadConfig:
             assert config.llm.provider == "litellm"
 
     def test_env_vars_override_defaults(self):
+        from repomind.utils.config import load_config
+        load_config.cache_clear()
         with patch.dict(os.environ, {"REPOMIND_LLM_MODEL": "gpt-4"}, clear=True):
             config = load_config(env_file="/nonexistent/.env")
             assert config.llm.model == "gpt-4"
@@ -54,8 +56,9 @@ class TestLoadConfig:
             assert config.llm.base_url == ""
 
     def test_invalid_timeout_uses_default(self):
-        """C3: Invalid integer should not crash."""
-        with patch.dict(os.environ, {"REPOMIND_SANDBOX_TIMEOUT": "abc"}, clear=True):
+        from repomind.utils.config import load_config
+        load_config.cache_clear()
+        with patch.dict(os.environ, {"REPOMIND_SANDBOX_TIMEOUT": "invalid"}, clear=True):
             config = load_config(env_file="/nonexistent/.env")
             assert config.sandbox.timeout == 60
 

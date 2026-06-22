@@ -1,6 +1,7 @@
 """Index command for RepoMind CLI."""
 
 from pathlib import Path
+from typing import Any
 from dataclasses import dataclass, field
 
 from rich.text import Text
@@ -27,10 +28,10 @@ class IndexCommand:
     description: str = "Index code repository"
 
     # Dependencies
-    console: any = None
+    console: Any = None
     project_path: Path = None
-    index_service: any = None
-    on_complete: any = None  # callback invoked after successful indexing
+    index_service: Any = None
+    on_complete: Any = None  # callback invoked after successful indexing
 
     def execute(self, args: str) -> None:
         """Execute index command.

@@ -62,13 +62,7 @@ class SymbolResolver:
         last_part = target.split(".")[-1] if "." in target else target
         if last_part in symbol_index:
             for qname in symbol_index[last_part]:
-                if qname.endswith(f".{target}"):
-                    return qname
-
-        # Fallback to full scanning (O(N)) if not found (guarantees compatibility with tests)
-        for name, qnames in symbol_index.items():
-            for qname in qnames:
-                if qname.endswith(f".{target}"):
+                if qname.endswith(f".{target}") or qname == target:
                     return qname
 
         return target if target else None

@@ -16,6 +16,8 @@ def path_to_module(file_path: str, project_root: str = "") -> str:
         Python module path with dots (e.g., "auth.service").
     """
     p = Path(file_path)
+    if p.drive:
+        p = Path(str(p)[len(p.drive):])
     if project_root:
         try:
             p = p.relative_to(project_root)

@@ -111,14 +111,14 @@ class GraphStore:
         self.graph.clear()
 
     def save(self, path: str) -> None:
-        """Serialize graph to disk with HMAC signature using JSON."""
+        """Serialize graph to disk with SHA256 checksum using JSON."""
         data = json.dumps(nx.node_link_data(self.graph)).encode("utf-8")
-        sig = hmac_mod.new(b"repomind", data, hashlib.sha256).hexdigest()
+        sig = hashlib.sha256(data).hexdigest()
         with open(path, "wb") as f:
             f.write(sig.encode() + b"\n" + data)
 
     def load(self, path: str) -> None:
-        """Load graph from disk, verifying HMAC signature and loading JSON."""
+        """Load graph from disk, verifying SHA256 checksum and loading JSON."""
         import os
 
         if not os.path.exists(path):
@@ -132,10 +132,10 @@ class GraphStore:
             return  # Empty file
 
         try:
-            expected = hmac_mod.new(b"repomind", data, hashlib.sha256).hexdigest()
-            if not hmac_mod.compare_digest(sig_line.decode(), expected):
+            expected = hashlib.sha256(data).hexdigest()
+            if sig_line.decode() != expected:
                 raise GraphLoadError(
-                    "Graph file signature mismatch - possible tampering"
+                    "Graph file signature mismatch - possible corruption or tampering"
                 )
         except (ValueError, UnicodeDecodeError):
             raise GraphLoadError("Invalid graph file format")

@@ -1,5 +1,6 @@
 """Help command for RepoMind CLI."""
 
+from typing import Any
 from dataclasses import dataclass, field
 
 from repomind.cli.commands import registry
@@ -14,7 +15,7 @@ class HelpCommand:
     description: str = "Show help information"
 
     # Dependencies
-    console: any = None
+    console: Any = None
 
     def execute(self, args: str) -> None:
         """Execute help command.

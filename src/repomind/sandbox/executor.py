@@ -57,6 +57,10 @@ class SandboxExecutor:
         safe_env = {
             "PATH": os.environ.get("PATH", ""),
             "PYTHONPATH": os.environ.get("PYTHONPATH", ""),
+            "HOME": os.environ.get("HOME", os.environ.get("USERPROFILE", "")),
+            "LANG": os.environ.get("LANG", "en_US.UTF-8"),
+            "TEMP": os.environ.get("TEMP", ""),
+            "TMP": os.environ.get("TMP", ""),
         }
         try:
             res = subprocess.run(
@@ -80,8 +84,8 @@ class SandboxExecutor:
             return SandboxResult(
                 success=False,
                 exit_code=-1,
-                stdout=e.stdout or "",
-                stderr=e.stderr or "",
+                stdout=str(e.stdout or ""),
+                stderr=str(e.stderr or ""),
                 elapsed_seconds=round(elapsed, 2),
                 error_message=f"Timeout expired after {self.timeout} seconds",
             )
@@ -118,6 +122,7 @@ class SandboxExecutor:
         docker_cmd = [
             "docker",
             "run",
+            "--rm",
             "--name",
             container_name,
             "--network",

@@ -23,7 +23,7 @@ class VisualizationService:
 
         for node in result.nodes[:max_nodes]:
             safe_id = re.sub(r"[^a-zA-Z0-9_]", "_", node.qualified_name)
-            shape = self._node_shape(node.type)
+            shape = self._node_shape(node.type, node.name)
             lines.append(f"    {safe_id}{shape}")
             seen_nodes.add(node.qualified_name)
 
@@ -48,11 +48,12 @@ class VisualizationService:
             lines.append(f"    {safe_id}[{name}]")
         return "\n".join(lines)
 
-    def _node_shape(self, sym_type: SymbolType) -> str:
+    def _node_shape(self, sym_type: SymbolType, label: str) -> str:
         """Return Mermaid node shape based on symbol type."""
+        safe_label = label.replace('"', '\\"')
         if sym_type == SymbolType.CLASS:
-            return "[Class]"
+            return f'["{safe_label}"]'
         elif sym_type == SymbolType.METHOD:
-            return "(Method)"
+            return f'("{safe_label}")'
         else:
-            return "[Func]"
+            return f'["{safe_label}"]'

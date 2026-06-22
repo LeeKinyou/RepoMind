@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Any
 
 from rich.text import Text
 from rich.table import Table
@@ -23,7 +23,7 @@ class ProjectCommand:
     description: str = "List or switch projects (/project [list|switch|add|remove])"
 
     # Dependencies
-    console: any = None
+    console: Any = None
     registry: ProjectRegistry = None
     switch_callback: Callable[[Path], None] = None
     current_path: Path = None

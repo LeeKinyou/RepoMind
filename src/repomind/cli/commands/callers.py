@@ -1,6 +1,7 @@
 """Callers command for RepoMind CLI."""
 
 from pathlib import Path
+from typing import Any
 from dataclasses import dataclass, field
 
 from rich.text import Text
@@ -19,9 +20,9 @@ class CallersCommand:
     description: str = "View who calls this symbol"
 
     # Dependencies
-    console: any = None
+    console: Any = None
     project_path: Path = None
-    query_service: any = None
+    query_service: Any = None
 
     def execute(self, args: str) -> None:
         """Execute callers command.
