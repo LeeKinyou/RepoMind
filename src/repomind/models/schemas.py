@@ -58,6 +58,7 @@ class SymbolInfo(BaseModel):
     signature: str | None = None
     is_exported: bool = True
     parent_class: str | None = None
+    snippet: str | None = None
 
 
 class SymbolRelation(BaseModel):
@@ -135,6 +136,19 @@ class QueryResult(BaseModel):
 # === RCA 模型 ===
 
 
+class EvidenceItem(BaseModel):
+    """诊断证据条目"""
+
+    file_path: str
+    symbol: str | None = None
+    start_line: int | None = None
+    end_line: int | None = None
+    snippet: str
+    source: str  # bm25, keyword, graph, traceback
+    score: float | None = None
+    why_relevant: str | None = None
+
+
 class RCAResult(BaseModel):
     """根因分析结果"""
 
@@ -145,6 +159,8 @@ class RCAResult(BaseModel):
     explanation: str = ""
     suggested_fix: str | None = None
     evidence: list[str] = Field(default_factory=list)
+    evidences: list[EvidenceItem] = Field(default_factory=list)
+    verification_command: str | None = None
 
 
 class FixResult(BaseModel):

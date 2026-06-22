@@ -59,11 +59,9 @@ class QueryService:
         )
 
     def search(self, query: str, options: QueryOptions | None = None) -> QueryResult:
-        """Execute hybrid retrieval query."""
+        """Execute local hybrid retrieval query without LLM calls."""
         import time
         import logging
-        import litellm
-        from repomind.utils.config import load_config
         from repomind.utils.errors import QueryError
 
         logger = logging.getLogger(__name__)
@@ -82,23 +80,61 @@ class QueryService:
 
         symbols = []
         sources = []
+        project_root = Path(self.sqlite.db_path).parent.parent
+
         for r in results:
-            symbols.append(self._dict_to_symbol_info(r.symbol))
+            sym_info = self._dict_to_symbol_info(r.symbol)
+
+            # Load code snippet if include_code option is enabled
+            if options.include_code:
+                try:
+                    p = Path(sym_info.file_path)
+                    if not p.is_absolute():
+                        p = project_root / p
+                    if p.exists():
+                        lines = p.read_text(
+                            encoding="utf-8", errors="replace"
+                        ).splitlines()
+                        start_idx = max(0, sym_info.start_line - 1)
+                        end_idx = min(len(lines), sym_info.end_line)
+                        sym_info.snippet = "\n".join(lines[start_idx:end_idx])
+                except Exception:
+                    pass
+
+            symbols.append(sym_info)
             sources.append(r.source)
 
-        # AI Reasoning answering using LiteLLM
+        elapsed = time.time() - start
+        answer = f"Found {len(symbols)} results locally for query: '{query}'."
+
+        return QueryResult(
+            answer=answer,
+            symbols=symbols,
+            confidence=max((r.score for r in results), default=0.0),
+            sources=list(set(sources)),
+            elapsed_seconds=round(elapsed, 3),
+        )
+
+    def answer(self, query: str, query_res: QueryResult) -> str:
+        """Generate LLM summary answering the query based on retrieved contexts."""
+        import logging
+        import litellm
+        from repomind.utils.config import load_config
+
+        logger = logging.getLogger(__name__)
         config = load_config()
         model_name = config.llm.model or "claude-sonnet-4-6"
 
-        # Build prompt
         context_parts = []
-        for sym in symbols:
+        for sym in query_res.symbols:
             sig = sym.signature or "No signature"
             doc = sym.docstring or "No docstring"
             part = f"- **Symbol**: `{sym.qualified_name}` ({sym.type.value})\n"
             part += f"  **File**: `{sym.file_path}` (Lines {sym.start_line}-{sym.end_line})\n"
             part += f"  **Signature**: `{sig}`\n"
             part += f"  **Docstring**: {doc}\n"
+            if sym.snippet:
+                part += f"  **Snippet**:\n```python\n{sym.snippet}\n```\n"
             context_parts.append(part)
 
         symbols_text = (
@@ -127,22 +163,13 @@ class QueryService:
                 timeout=30,
                 **litellm_args,
             )
-            answer = response.choices[0].message.content
+            return response.choices[0].message.content
         except Exception as e:
             logger.warning(
-                "LiteLLM completion failed: %s. Falling back to deterministic answer.",
+                "LiteLLM completion failed for answering: %s.",
                 e,
             )
-            answer = f"Found {len(symbols)} results for: {query}. (AI answering offline or not configured: {e})"
-
-        elapsed = time.time() - start
-        return QueryResult(
-            answer=answer,
-            symbols=symbols,
-            confidence=max((r.score for r in results), default=0.0),
-            sources=list(set(sources)),
-            elapsed_seconds=round(elapsed, 3),
-        )
+            return f"Found {len(query_res.symbols)} results for: {query}. (AI answering offline or not configured: {e})"
 
     def lookup_symbol(self, query: str, limit: int = 1) -> list[SymbolInfo]:
         """Look up symbols locally from database/retriever without calling LLM."""
