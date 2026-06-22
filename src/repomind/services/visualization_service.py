@@ -1,4 +1,5 @@
 """Visualization service - Mermaid diagram generation."""
+
 from __future__ import annotations
 
 import re
@@ -12,22 +13,24 @@ class VisualizationService:
     def __init__(self, graph_store: GraphStore | None = None):
         self.graph = graph_store or GraphStore()
 
-    def call_graph_to_mermaid(self, result: CallGraphResult, max_nodes: int = 30) -> str:
+    def call_graph_to_mermaid(
+        self, result: CallGraphResult, max_nodes: int = 30
+    ) -> str:
         """Convert a CallGraphResult to Mermaid diagram."""
         lines = ["graph TD"]
         seen_nodes = set()
         seen_edges = set()
 
         for node in result.nodes[:max_nodes]:
-            safe_id = re.sub(r'[^a-zA-Z0-9_]', '_', node.qualified_name)
+            safe_id = re.sub(r"[^a-zA-Z0-9_]", "_", node.qualified_name)
             shape = self._node_shape(node.type)
             lines.append(f"    {safe_id}{shape}")
             seen_nodes.add(node.qualified_name)
 
         for edge in result.edges:
             if edge.source in seen_nodes and edge.target in seen_nodes:
-                src = re.sub(r'[^a-zA-Z0-9_]', '_', edge.source)
-                tgt = re.sub(r'[^a-zA-Z0-9_]', '_', edge.target)
+                src = re.sub(r"[^a-zA-Z0-9_]", "_", edge.source)
+                tgt = re.sub(r"[^a-zA-Z0-9_]", "_", edge.target)
                 edge_key = (src, tgt)
                 if edge_key not in seen_edges:
                     seen_edges.add(edge_key)
@@ -40,7 +43,7 @@ class VisualizationService:
         lines = ["graph LR"]
         for sym in symbols:
             qname = sym.get("qualified_name", "")
-            safe_id = re.sub(r'[^a-zA-Z0-9_]', '_', qname)
+            safe_id = re.sub(r"[^a-zA-Z0-9_]", "_", qname)
             name = sym.get("name", "?")
             lines.append(f"    {safe_id}[{name}]")
         return "\n".join(lines)

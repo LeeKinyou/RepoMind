@@ -1,4 +1,5 @@
 """Core data models for RepoMind."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -11,6 +12,7 @@ from pydantic import BaseModel, Field
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 class SymbolType(str, Enum):
     CLASS = "class"
@@ -42,8 +44,10 @@ def safe_symbol_type(raw: str) -> SymbolType:
 
 # === 符号模型 ===
 
+
 class SymbolInfo(BaseModel):
     """代码符号信息"""
+
     name: str
     qualified_name: str
     type: SymbolType
@@ -58,6 +62,7 @@ class SymbolInfo(BaseModel):
 
 class SymbolRelation(BaseModel):
     """符号关系"""
+
     source: str  # qualified_name
     target: str  # qualified_name
     relation_type: RelationType
@@ -67,11 +72,20 @@ class SymbolRelation(BaseModel):
 
 # === 索引模型 ===
 
+
 class IndexOptions(BaseModel):
     """索引配置选项"""
+
     language: str = "python"
     output_dir: str = ".repomind"
-    ignore_patterns: list[str] = Field(default_factory=lambda: ["**/__pycache__/**", "**/.git/**", "**/venv/**", "**/.venv/**"])
+    ignore_patterns: list[str] = Field(
+        default_factory=lambda: [
+            "**/__pycache__/**",
+            "**/.git/**",
+            "**/venv/**",
+            "**/.venv/**",
+        ]
+    )
     max_file_size_mb: float = 5.0
     incremental: bool = False
     verbose: bool = False
@@ -79,6 +93,7 @@ class IndexOptions(BaseModel):
 
 class IndexResult(BaseModel):
     """索引结果"""
+
     success: bool
     total_files: int = 0
     indexed_files: int = 0
@@ -95,8 +110,10 @@ class IndexResult(BaseModel):
 
 # === 查询模型 ===
 
+
 class QueryOptions(BaseModel):
     """查询配置"""
+
     max_results: int = 10
     include_code: bool = True
     include_docs: bool = True
@@ -106,6 +123,7 @@ class QueryOptions(BaseModel):
 
 class QueryResult(BaseModel):
     """查询结果"""
+
     answer: str
     symbols: list[SymbolInfo] = Field(default_factory=list)
     relations: list[SymbolRelation] = Field(default_factory=list)
@@ -116,8 +134,10 @@ class QueryResult(BaseModel):
 
 # === RCA 模型 ===
 
+
 class RCAResult(BaseModel):
     """根因分析结果"""
+
     root_cause: str
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     affected_symbols: list[SymbolInfo] = Field(default_factory=list)
@@ -129,6 +149,7 @@ class RCAResult(BaseModel):
 
 class FixResult(BaseModel):
     """修复建议结果"""
+
     file_path: str
     original_code: str
     suggested_code: str
@@ -138,8 +159,10 @@ class FixResult(BaseModel):
 
 # === 图模型 ===
 
+
 class CallGraphResult(BaseModel):
     """调用图结果"""
+
     nodes: list[SymbolInfo] = Field(default_factory=list)
     edges: list[SymbolRelation] = Field(default_factory=list)
     root_symbol: str = ""
@@ -148,8 +171,10 @@ class CallGraphResult(BaseModel):
 
 # === 文件模型 ===
 
+
 class FileInfo(BaseModel):
     """文件信息"""
+
     path: str
     language: str
     hash: str

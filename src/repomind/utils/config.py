@@ -1,4 +1,5 @@
 """Configuration management for RepoMind."""
+
 from pathlib import Path
 from pydantic import BaseModel, Field
 

@@ -1,4 +1,5 @@
 """Data models for RepoMind."""
+
 from repomind.models.schemas import (
     SymbolType,
     RelationType,
