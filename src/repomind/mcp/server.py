@@ -103,7 +103,7 @@ class MCPServer:
             repo_path = arguments.get("repo_path") or os.getcwd()
             index_dir = os.path.join(repo_path, ".repomind")
 
-            if tool_name == "repomind_index_repo":
+            if tool_name in ("repomind.index_repo", "repomind_index_repo"):
                 incremental = arguments.get("incremental", False)
                 service = IndexService(index_dir=index_dir)
                 opts = IndexOptions(incremental=incremental)
@@ -124,14 +124,14 @@ class MCPServer:
                     )
                 return self._make_success_response(msg_id, content_text)
 
-            elif tool_name == "repomind_search_code":
+            elif tool_name in ("repomind.search_code", "repomind_search_code"):
                 query = arguments.get("query")
                 max_results = arguments.get("max_results", 5)
 
                 if not os.path.exists(os.path.join(index_dir, "index.db")):
                     return self._make_success_response(
                         msg_id,
-                        f"Index database not found in {index_dir}. Please run 'repomind_index_repo' first.",
+                        f"Index database not found in {index_dir}. Please run 'repomind.index_repo' first.",
                     )
 
                 service = QueryService(index_dir=index_dir)
@@ -148,14 +148,17 @@ class MCPServer:
                         content_text += f"  Docstring: *{sym.docstring.strip()}*\n"
                 return self._make_success_response(msg_id, content_text)
 
-            elif tool_name == "repomind_expand_call_chain":
+            elif tool_name in (
+                "repomind.expand_call_chain",
+                "repomind_expand_call_chain",
+            ):
                 qualified_name = arguments.get("qualified_name")
                 depth = arguments.get("depth", 2)
 
                 if not os.path.exists(os.path.join(index_dir, "index.db")):
                     return self._make_success_response(
                         msg_id,
-                        f"Index database not found in {index_dir}. Please run 'repomind_index_repo' first.",
+                        f"Index database not found in {index_dir}. Please run 'repomind.index_repo' first.",
                     )
 
                 service = QueryService(index_dir=index_dir)
@@ -172,13 +175,13 @@ class MCPServer:
                     content_text += f"- `{edge.source}` --({edge.relation_type.value})--> `{edge.target}`\n"
                 return self._make_success_response(msg_id, content_text)
 
-            elif tool_name == "repomind_diagnose_issue":
+            elif tool_name in ("repomind.diagnose_issue", "repomind_diagnose_issue"):
                 trace = arguments.get("trace")
 
                 if not os.path.exists(os.path.join(index_dir, "index.db")):
                     return self._make_success_response(
                         msg_id,
-                        f"Index database not found in {index_dir}. Please run 'repomind_index_repo' first.",
+                        f"Index database not found in {index_dir}. Please run 'repomind.index_repo' first.",
                     )
 
                 service = RCAService(index_dir=index_dir)
@@ -205,7 +208,7 @@ class MCPServer:
         """Return the standard tools manifest for MCP client registration."""
         return [
             {
-                "name": "repomind_index_repo",
+                "name": "repomind.index_repo",
                 "description": "Index the codebase to build structural database (AST symbols, call graphs, imports).",
                 "inputSchema": {
                     "type": "object",
@@ -222,7 +225,7 @@ class MCPServer:
                 },
             },
             {
-                "name": "repomind_search_code",
+                "name": "repomind.search_code",
                 "description": "Perform code-aware hybrid search (BM25 + SQLite DB) and return AI-generated answer.",
                 "inputSchema": {
                     "type": "object",
@@ -244,7 +247,7 @@ class MCPServer:
                 },
             },
             {
-                "name": "repomind_expand_call_chain",
+                "name": "repomind.expand_call_chain",
                 "description": "Traverse the static call graph topology starting from a qualified code symbol (BFS).",
                 "inputSchema": {
                     "type": "object",
@@ -266,7 +269,7 @@ class MCPServer:
                 },
             },
             {
-                "name": "repomind_diagnose_issue",
+                "name": "repomind.diagnose_issue",
                 "description": "Submit a stack trace / error log to get a detailed diagnosis evidence report.",
                 "inputSchema": {
                     "type": "object",
