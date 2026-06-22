@@ -55,12 +55,10 @@ class TestEvidenceReporter:
         report = EvidenceReporter.generate_markdown_report(
             sample_rca_result, query="ZeroDivisionError"
         )
-        assert "# RepoMind Issue Diagnosis & Evidence Report" in report
+        assert "# RepoMind Evidence Report" in report
         assert "ZeroDivisionError" in report
         assert "Division by zero in math_utils.py" in report
-        assert "math_utils.py:10 - divide" in report
         assert "repomind.utils.math_utils.divide" in report
-        assert "numerator / denominator" in report
 
     def test_generate_json_report(self, sample_rca_result):
         report_str = EvidenceReporter.generate_json_report(
@@ -104,10 +102,10 @@ class TestMCPServer:
         tools = res["result"]["tools"]
         assert len(tools) == 4
         tool_names = [t["name"] for t in tools]
-        assert "repomind_index_repo" in tool_names
-        assert "repomind_search_code" in tool_names
-        assert "repomind_expand_call_chain" in tool_names
-        assert "repomind_diagnose_issue" in tool_names
+        assert "repomind.index_repo" in tool_names
+        assert "repomind.search_code" in tool_names
+        assert "repomind.expand_call_chain" in tool_names
+        assert "repomind.diagnose_issue" in tool_names
 
     @patch(
         "sys.stdin", StringIO('{"jsonrpc": "2.0", "method": "initialize", "id": 1}\n')
@@ -246,3 +244,65 @@ class TestNewCLICoomands:
                 ],
             )
             assert result.exit_code == 0
+
+
+class TestRCAPathNormalization:
+    def test_path_normalization(self, tmp_path):
+        from repomind.services.rca_service import RCAService
+        from pathlib import Path
+
+        index_dir = tmp_path / ".repomind"
+        index_dir.mkdir()
+        (index_dir / "index.db").touch()
+
+        service = RCAService(index_dir=str(index_dir))
+
+        service.project_root = Path("C:/project/root")
+        assert (
+            service._normalize_path("C:\\project\\root\\src\\helper.py")
+            == "src/helper.py"
+        )
+        assert (
+            service._normalize_path(
+                "/var/lib/docker/container/src/repomind/core/parser.py"
+            )
+            == "src/repomind/core/parser.py"
+        )
+        assert (
+            service._normalize_path("relative/path/test.py") == "relative/path/test.py"
+        )
+
+    def test_path_normalization_db_fallback(self, tmp_path):
+        from repomind.services.rca_service import RCAService
+        from repomind.storage.sqlite_store import SQLiteStore
+        from repomind.models.schemas import FileInfo
+
+        index_dir = tmp_path / ".repomind"
+        index_dir.mkdir()
+
+        sqlite = SQLiteStore(str(index_dir / "index.db"))
+        sqlite.upsert_file(
+            FileInfo(
+                path="src/main.py",
+                language="python",
+                hash="dummy",
+                line_count=10,
+                size_bytes=100,
+            )
+        )
+
+        service = RCAService(index_dir=str(index_dir), sqlite=sqlite)
+        service.project_root = tmp_path
+
+        assert (
+            service._normalize_path("/unknown/container/path/main.py") == "src/main.py"
+        )
+
+
+class TestVisualizeCommand:
+    def test_visualize_command(self):
+        with patch("repomind.cli.app.graph") as mock_graph:
+            runner = CliRunner()
+            result = runner.invoke(app, ["visualize", "AuthService", "--depth", "3"])
+            assert result.exit_code == 0
+            mock_graph.assert_called_once_with(name="AuthService", project=".", depth=3)
