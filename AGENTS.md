@@ -4,9 +4,15 @@ This file provides guidance to Antigravity when working with this repository.
 
 ## Project Overview
 
-RepoMind 是一款面向大型代码仓库的 Repository Intelligence Platform，通过静态分析（Tree-sitter）、图谱检索（SQLite + NetworkX + LanceDB）和 AI 推理（LiteLLM）的深度融合，帮助开发者快速理解代码架构、精准定位问题根因。
+RepoMind 是一款**面向代码仓库的智能诊断与证据构建智能体（Agentic Debugging & Evidence System）**。它聚焦于解决代码智能体工作流中最为核心的“问题定位、上下文压缩、调用链扩展与诊断证据链（Evidence Report）生成”问题。
 
-首期仅支持 Python 语言。
+### 定位与对标（为什么不是另一个 Claude Code）
+RepoMind 的定位并非一个大而全的通用 Coding Agent（如 Claude Code 或 Cursor Agent 等商业化通用软件工程智能体，它们涵盖完整的代码编辑、测试运行和 PR 提交）。
+
+相反，RepoMind 聚焦于**问题诊断与证据检索**：
+- **定位**：代码仓库智能诊断 Agent / 智能体工作流的“诊断及上下文增强层”。
+- **核心任务**：输入报错日志、测试失败信息或自然语言问题，自动在代码仓库中定位到最相关的符号，并通过静态调用图进行拓扑扩展，为 LLM 生成一份带有文件路径、函数名、行号及原因分析的可解释诊断报告（Evidence Report）。
+- **生态接入**：RepoMind 可作为 **MCP Server** 接入外部成熟智能体工作流（如 Claude Code、Cursor 或自研主 Agent），为它们提供更精准的代码库检索与诊断证据。
 
 ## Package Management
 
@@ -116,108 +122,70 @@ uv run repomind stats
 
 ```
 src/repomind/
-├── cli/                # CLI 命令层 (Typer)
-├── services/           # 应用服务层
-│   ├── index_service.py
-│   ├── query_service.py
-│   ├── rca_service.py
-│   └── visualization_service.py
-├── core/               # 核心引擎层
-│   ├── parser/         # Tree-sitter 解析引擎
-│   ├── type_inference/ # 渐进式类型推断（6 策略级联）
-│   ├── call_graph/     # 调用图构建
-│   └── retrieval/      # 混合检索引擎（BM25 + 向量 + 图扩展）
-├── models/             # 数据模型（Pydantic）
-├── storage/            # 存储层（SQLite + LanceDB + NetworkX）
-├── sandbox/            # 沙箱执行器（Docker / 子进程）
-└── utils/              # 工具函数
+├── cli/                # CLI 命令与交互式 REPL (Typer)
+├── indexer/            # 仓库扫描与 AST 解析 (Tree-sitter)
+├── retriever/          # 混合检检索 (BM25 + sqlite-vec 语义 + RRF)
+├── graph/              # 静态调用图构建与拓扑分析 (NetworkX)
+├── context/            # 上下文拼接与骨架化压缩
+├── agent/              # 诊断 Reasoner (LiteLLM 调用)
+├── reporter/           # 结构化 Evidence Report (Markdown/JSON)
+├── sandbox/            # 安全沙箱代码执行器 (Docker / 受限 subprocess)
+├── models/             # 统一数据模型与 Pydantic 约束
+├── storage/            # 本地嵌入式数据持久化 (SQLite + JSON)
+├── mcp/                # Model Context Protocol 工具服务接口
+└── utils/              # 路径、环境配置等通用工具
 ```
 
-### 核心数据流
+### 核心数据/控制流
 
 ```
-源代码 → Tree-sitter 解析 → 符号提取 → 类型推断 → 调用图构建
-                                                        │
-                    ┌───────────────────────────────────┤
-                    v                                   v
-              SQLite（结构化存储）              LanceDB（向量存储）
-                    │                                   │
-                    └───────────────┬───────────────────┘
-                                    v
-                          混合检索（BM25 + 向量 + RRF 融合）
-                                    │
-                                    v
-                          图拓扑 BFS 2-hop 扩展（NetworkX）
-                                    │
-                                    v
-                            上下文骨架化剪枝 → LLM
+报错日志 / 用户 Query
+         ↓
+  [Query Analyzer]
+         ↓
+  [Code Indexer] (AST 物理文件结构抽取)
+         ↓
+  [Hybrid Retriever] (BM25 词频匹配 + 向量嵌入 + RRF 排序)
+         ↓
+  [Call Graph Expander] (NetworkX 图拓扑 BFS 2-hop 关系蔓延)
+         ↓
+  [Context Builder] (包含文件、类、函数名与物理代码行的上下文)
+         ↓
+  [LLM Reasoner] (利用 LiteLLM 进行根因推理与修复方案决策)
+         ↓
+  [Evidence Reporter] (生成带诊断链依据的 Markdown/JSON 报告)
 ```
 
 ## Key Technical Decisions
 
-- **Tree-sitter** 而非完整编译器：语法容错，无需配置依赖即可解析
-- **SQLite + NetworkX** 而非 Neo4j：零配置、本地优先、微秒级查询
-- **LanceDB** 而非 FAISS/Milvus：无服务器、磁盘存储、嵌入式
-- **渐进式类型推断** 而非完整类型检查：开箱即用，6 策略级联（0.95 → 0.40 置信度）
-- **Explorer-Solver 双 Agent + 线性管道** 而非多 Agent 自由协商：避免死锁，Token 可控
-- **Docker 沙箱** 作为默认安全方案：网络禁用、只读挂载、资源限制
+- **定位在“检索与分析依据”而非“通用代码生成”**：不以自动写 PR 为唯一归宿，而是为 LLM 与开发者提供清晰的、可复核的代码关联证据（Evidence Report），从而降低代码幻觉与上下文冗余。
+- **Tree-sitter 静态解析**：保持语法高容错性，无需配置运行依赖即可提取精确的代码结构和依赖。
+- **SQLite + NetworkX**：提供零部署摩擦、极佳本地响应时间的内存图网络运算，支持微秒级拓扑遍历。
+- **可插拔的 MCP Server 接口**：暴露出 `repomind.diagnose_issue` 和 `repomind.expand_call_chain` 等标准工具，使 RepoMind 可以轻量集成进任何外部 Coding Agent 流程。
+- **受限沙箱与自动降级**：默认支持 Docker 沙箱执行测试和排错脚本，并能向 Subprocess 级别的资源与网络受限环境自动优雅降级，保障系统安全性。
 
-## Conventions
+## Evaluation & Benchmarking
 
-- Commit Message 遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范
-- 代码风格遵循 PEP 8，使用 Ruff 格式化
-- 类型注解：所有公开函数必须有完整的类型注解
-- Docstring：使用 Google 风格
-- 测试：pytest，使用 Arrange-Act-Assert 模式
-- 分支命名：`feat/`、`fix/`、`docs/`、`refactor/`、`test/`、`chore/`
+RepoMind 内建小型 Bug 评估测试集（`tests/` 下与 `eval/benchmark_cases.json`），通过以下指标自动度量代码诊断准确度：
+- **Top-1 / Top-3 File Hit Rate**：第一顺位/前三顺位代码文件定位准确率。
+- **Function Hit Rate**：错误源函数定位命中率。
+- **Evidence Coverage**：诊断报告中引用关键代码块的覆盖率。
 
-## Lessons Learned — 代码审查反思
+## Lessons Learned — 代码审查与重构反思
 
-两轮审查共修复 38 个问题。以下是反复出现的根因模式，编写代码时必须避免。
+重构与测试闭环后总结的根因模式，编写代码时必须严格遵守：
 
-### 1. 修一条线，不修一个点
+### 1. 细粒度调用关系维护
+在解析和构建调用边时，必须明确记录调用者函数的具体限定名（`caller_qname`），严禁将其模糊折叠或归属为父类（`caller_class`）或模块级别，以确保图计算和影响面分析的精准。
 
-修 bug 时不能只改眼前的那一行。必须：
-- **grep 全项目**找所有同类代码（如 `.replace("/", ".")` 在 4 处出现）
-- **检查所有调用点**是否需要同步修改（如 `safe_symbol_type` 需要放在公共位置）
-- **检查数据流上下游**（如 symbol_index 类型从 `dict[str,str]` 改为 `dict[str,list[str]]`，resolver 和测试必须同步更新）
+### 2. 真实大模型对齐与优雅退避
+在 `QueryService` 和 `RCAService` 中必须切实通过 `litellm` 调用大模型进行问题解答与修复代码生成；若 API 密钥缺失或网络异常，系统必须提供高容错的本地规则降级退避，绝不能让整个服务崩溃。
 
-### 2. 设计假设必须考虑最坏情况
+### 3. 类型推断兼容内置类型与复合法
+推断引擎在处理显式类型提示时，不能仅以首字母大写筛选，必须兼容小写内置类型（如 `str`, `list`）及复合类型（如 `dict[str, int]`），同时使用 Python 的 `keyword` 库排除系统关键字。
 
-- 键是否可能重复？→ `__init__`、`get`、`parse` 在大项目中随处可见，不能用短名作唯一键
-- 输入是否可能有噪声？→ 源码正则匹配必须排除注释 and 字符串
-- 边界是否做了类型转换？→ NetworkX 存 `str`，Pydantic 要 `SymbolType`，必须在边界处显式转换
+### 4. 增量更新与幂等性设计
+同一目录重复索引时必须保证幂等，通过文件 Hash 比较避免数据库条目无限累加。对于已在磁盘上被物理删除的文件，在增量扫描时必须主动级联清理 SQLite 符号表和 GraphStore 节点，保持数据纯净度。
 
-### 3. 字符串分割是脆弱的解析策略
-
-tree-sitter 已提供精确的 AST 节点边界，应该利用它而不是 `split(":")` / `split("->")`：
-- 签名提取 → 用 `body_node.start_byte` 精确切取
-- 返回类型 → 用正则 `->\s*([\w\[\],\s\.]+)\s*:` 匹配
-
-### 4. 异常捕获必须精确
-
-`except Exception` 会掩盖真正的错误。明确"什么异常表示什么情况"，只捕获预期的异常类型：
-- LanceDB 表不存在 → `(ValueError, KeyError, OSError)`
-- SQLite 连接失败 → `sqlite3.OperationalError`
-- 文件被删除 → `OSError`
-
-### 5. 代码搜索/检索需要领域适配
-
-BM25 为自然语言设计，用于代码搜索必须适配：
-- 分词：按 `_.\s` 分割，`get_user_info` → `["get", "user", "info"]`
-- 噪声：排除注释和字符串中的匹配
-- 融合：不同 source 的 score 量纲不同，必须用 RRF 而非直接比较
-
-### 6. 端到端测试不可或缺
-
-单元测试保证每个零件合格，但不能保证组装后能用。关键路径必须有端到端测试：
-- 索引 → 查询 → 图扩展 → 结果非空
-- 索引 → RCA → 符号查找 → 匹配成功
-- 索引 → 搜索 "user" → 能找到 `get_user_info`
-
-## Important Files
-
-- `pyproject.toml` — 项目元数据、依赖、构建配置
-- `.env.example` — 环境变量模板
-- `.ruff.toml` — Ruff 格式化和 Lint 配置
-- `AGENTS.md` — 本文件，Antigravity 项目指引
+### 5. 绝对路径剥离
+qualified name 的生成必须完全剥离开发机本地的绝对路径盘符，统一向后使用 project-relative path，保证索引数据库能够跨环境/跨机器稳定移植。

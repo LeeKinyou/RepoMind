@@ -10,7 +10,10 @@ RepoMind 是一款面向大型代码仓库的 **Repository Intelligence Platform
 - **混合检索** — BM25 关键字检索 + 向量语义检索 + 图拓扑 2-hop 扩展，精准召回率远超纯向量 RAG
 - **渐进式类型推断** — 6 策略级联推断算法，无需编译即可实现 70%+ 的 Python 类型推断准确率
 - **智能根因分析** — Stack Trace 逆向对齐 + 沙箱自愈验证，自动生成修复补丁并回归测试
-- **架构可视化** — 自动生成 Mermaid 调用图/依赖图，一行命令看清模块关系
+- **架构可视化** — 自动生成 Mermaid 调用图/依赖图，支持自定义展示层数，轻松理清调用脉络
+- **MCP 协议对接** — 提供标准 Stdio 协议的 MCP Server，能无缝集成至 Claude Desktop、Cursor 等外部 AI 智能体工作流
+- **结构化证据报告** — 支持一键将 RCA 根因定位结果导出为包含详细诊断链、修复补丁和影响面评估的 Markdown / JSON 证据报告
+- **基准性能评估** — 内置评估框架与 Bug 基准用例，自动运行并统计 Top-1/Top-3 文件命中率、函数定位率等诊断效率指标
 - **Token 节省 90%+** — 单次查询仅消耗 ~5,000 Tokens，相比传统文件遍历节省 40 万 Tokens
 - **100% 本地运行** — 零配置开箱即用，无需联网，数据不离开本机
 
@@ -57,10 +60,13 @@ repomind visualize AuthService --depth 3 --format mermaid
 | 命令 | 说明 | 示例 |
 |------|------|------|
 | `repomind index <path>` | 构建代码仓库索引 | `repomind index ./src` |
-| `repomind query <question>` | 混合检索查询 | `repomind query "支付处理" --expand 2` |
-| `repomind rca` | 根因分析 | `repomind rca --trace error.log` |
+| `repomind query <question>` | 混合检索查询 | `repomind query "支付处理"` |
+| `repomind rca` | 交互式/文件根因分析 | `repomind rca --trace error.log` |
+| `repomind diagnose <trace_file>` | 根因分析并输出 Markdown/JSON 诊断证据报告 | `repomind diagnose error.log -o report.md` |
 | `repomind visualize <symbol>` | 架构可视化 | `repomind visualize UserService --format mermaid` |
 | `repomind stats` | 显示索引统计 | `repomind stats` |
+| `repomind mcp` | 启动 Stdio 模式的 MCP Server 服务端口 | `repomind mcp` |
+| `repomind eval` | 运行内置 Bug 基准用例并自动评估命中率指标 | `repomind eval --project .` |
 
 ## 项目结构
 
