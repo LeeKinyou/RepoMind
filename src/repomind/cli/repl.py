@@ -1,37 +1,55 @@
-"""REPL (Read-Eval-Print Loop) for RepoMind CLI."""
+"""REPL (Read-Eval-Print Loop) for RepoMind CLI.
+
+Integrates:
+- Dynamic context-aware prompt (project name + index status)
+- Tab completion and command history (via prompt_toolkit)
+- Fuzzy command correction for typos
+- Onboarding wizard when project is not indexed
+- Main menu dashboard on startup
+- Project switching via /project command
+"""
+
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
+from rich.align import Align
 from rich.console import Console
+from rich.table import Table
+from rich.text import Text
 
 from repomind.cli.themes import REPOIND_THEME
 from repomind.cli.components import show_banner
 from repomind.cli.commands import registry
+from repomind.cli.projects import ProjectRegistry
+from repomind.cli.prompt_utils import (
+    make_prompt_session,
+    suggest_command,
+    prompt_string,
+)
 
 
 class RepoMindREPL:
-    """RepoMind 交互式命令行界面。"""
+    """RepoMind interactive CLI."""
 
-    def __init__(self, project_path: Path | None = None):
-        """初始化 REPL。
+    def __init__(self, project_path: Path | None = None) -> None:
+        """Initialize REPL.
 
         Args:
-            project_path: 项目路径，默认为当前目录
+            project_path: Project path (defaults to current directory)
         """
         self.project = project_path or Path.cwd()
         self.console = Console(theme=REPOIND_THEME)
         self._should_quit = False
+        self.project_registry = ProjectRegistry()
+        self._prompt_session = None
 
-        # 初始化服务
+        # Initialize services and commands for the initial project
         self._init_services()
-
-        # 注册命令
         self._register_commands()
 
     def _init_services(self) -> None:
-        """初始化服务。"""
+        """Initialize services for the current project."""
         from repomind.services.index_service import IndexService
         from repomind.services.query_service import QueryService
         from repomind.services.rca_service import RCAService
@@ -43,7 +61,10 @@ class RepoMindREPL:
         self.rca_service = RCAService(index_dir=str(index_dir))
 
     def _register_commands(self) -> None:
-        """注册所有命令。"""
+        """Register all commands for the current project."""
+        # Clear existing registrations to support project switching
+        registry._commands.clear()
+
         from repomind.cli.commands.index import register_index_command
         from repomind.cli.commands.query import register_query_command
         from repomind.cli.commands.show import register_show_command
@@ -54,9 +75,26 @@ class RepoMindREPL:
         from repomind.cli.commands.help import register_help_command
         from repomind.cli.commands.quit import register_quit_command
         from repomind.cli.commands.rca import register_rca_command
+        from repomind.cli.commands.project import register_project_command
 
-        # 注册命令
-        register_index_command(self.console, self.project, self.index_service)
+        # Index completion callback updates the project registry
+        def on_index_complete(result):
+            try:
+                self.project_registry.add(
+                    self.project,
+                    indexed=True,
+                    file_count=result.indexed_files,
+                    symbol_count=result.total_symbols,
+                )
+            except Exception:
+                pass
+
+        register_index_command(
+            self.console,
+            self.project,
+            self.index_service,
+            on_complete=on_index_complete,
+        )
         register_query_command(self.console, self.project, self.query_service)
         register_show_command(self.console, self.project, self.query_service)
         register_graph_command(self.console, self.project, self.query_service)
@@ -66,38 +104,82 @@ class RepoMindREPL:
         register_help_command(self.console)
         register_quit_command(self.console, self._set_quit)
         register_rca_command(self.console, self.project, self.rca_service)
+        register_project_command(
+            self.console,
+            self.project_registry,
+            self.project,
+            self._switch_project,
+        )
+
+    def _switch_project(self, new_path: Path) -> None:
+        """Switch to a different project.
+
+        Args:
+            new_path: New project path
+        """
+        self.project = new_path
+        self._init_services()
+        self._register_commands()
+        # Reset prompt session to refresh completer
+        self._prompt_session = None
+
+        # Show new banner
+        stats = self._get_stats()
+        show_banner(self.console, self.project, stats, project_name=self.project.name)
 
     def _set_quit(self) -> None:
-        """设置退出标志。"""
+        """Set the quit flag."""
         self._should_quit = True
 
     def _get_stats(self) -> dict | None:
-        """获取索引统计。"""
+        """Get index statistics, returning None if not indexed."""
         try:
-            return self.index_service.get_stats()
+            stats = self.index_service.get_stats()
+            # Treat as "not indexed" if there are no files
+            if not stats or stats.get("files", 0) == 0:
+                return None
+            return stats
         except Exception:
             return None
 
+    def _is_indexed(self) -> bool:
+        """Check if the current project is indexed."""
+        return self._get_stats() is not None
+
+    def _get_prompt_session(self):
+        """Lazily create the prompt session with current commands."""
+        if self._prompt_session is None:
+            commands = [cmd.name for cmd in registry.list_all()]
+            # Also include aliases for completion
+            for cmd in registry.list_all():
+                commands.extend(cmd.aliases)
+            history_path = self.project / ".repomind" / "history"
+            self._prompt_session = make_prompt_session(
+                history_path=history_path,
+                commands=commands,
+            )
+        return self._prompt_session
+
     def _handle_input(self, text: str) -> None:
-        """处理用户输入。
+        """Handle user input.
 
         Args:
-            text: 用户输入文本
+            text: User input text
         """
         text = text.strip()
         if not text:
             return
 
-        if text.startswith('/'):
+        if text.startswith("/"):
             self._handle_command(text)
         else:
             self._handle_query(text)
 
     def _handle_command(self, text: str) -> None:
-        """处理命令。
+        """Handle a slash command, with fuzzy correction for typos.
 
         Args:
-            text: 命令文本（以 / 开头）
+            text: Command text (starts with /)
         """
         parts = text.split(maxsplit=1)
         cmd_name = parts[0].lower()
@@ -106,52 +188,152 @@ class RepoMindREPL:
         cmd = registry.get(cmd_name)
         if cmd:
             cmd.execute(args)
+            return
+
+        # Fuzzy correction — suggest the closest matching command
+        all_commands = [cmd.name for cmd in registry.list_all()]
+        for c in registry.list_all():
+            all_commands.extend(c.aliases)
+
+        suggestion = suggest_command(cmd_name, all_commands)
+        if suggestion:
+            line = Text()
+            line.append("  Unknown command: ", style="red")
+            line.append(cmd_name, style="bold red")
+            line.append(". Did you mean ", style="dim")
+            line.append(suggestion, style="cyan")
+            line.append("?", style="dim")
+            self.console.print(line)
+
+            line2 = Text()
+            line2.append("  Type ", style="dim")
+            line2.append("/help", style="cyan")
+            line2.append(" for all commands", style="dim")
+            self.console.print(line2)
         else:
-            self.console.print(f"[red]Unknown command: {cmd_name}[/]")
-            self.console.print("Type [cyan]/help[/] for available commands")
+            self.console.print(
+                Text(
+                    f"  Unknown command: {cmd_name}",
+                    style="red",
+                )
+            )
+            self.console.print(
+                Text(
+                    "  Type /help for available commands",
+                    style="dim",
+                )
+            )
 
     def _handle_query(self, query: str) -> None:
-        """处理自然语言查询。
+        """Handle natural language query.
 
         Args:
-            query: 查询文本
+            query: Query text
         """
-        from repomind.cli.commands.query import QueryCommand
-
-        # 找到查询命令并执行
         cmd = registry.get("/query")
         if cmd:
             cmd.execute(query)
 
-    def run(self) -> None:
-        """运行 REPL。"""
-        # 显示横幅
-        stats = self._get_stats()
-        show_banner(self.console, self.project, stats)
+    def _show_onboarding(self) -> None:
+        """Show onboarding wizard when project is not indexed."""
+        line = Text("  Start with ", style="muted")
+        line.append("/index", style="command")
+        line.append(
+            " - it builds the local symbol and call graph index.", style="muted"
+        )
+        self.console.print(line)
+        self.console.print()
 
-        # 主循环
+    def _show_dashboard(self) -> None:
+        """Show the highest-value actions for the current workspace."""
+        content_width = min(68, max(36, self.console.width - 4))
+        actions = (
+            [
+                ("Ask a question", "type natural language"),
+                ("/graph <symbol>", "inspect call relationships"),
+                ("/index", "rebuild repository index"),
+                ("/help", "show every command"),
+            ]
+            if self._is_indexed()
+            else [
+                ("/index", "build the repository index"),
+                ("Ask a question", "search after indexing"),
+                ("/project", "open another workspace"),
+                ("/help", "show every command"),
+            ]
+        )
+
+        action_table = Table.grid(padding=(0, 2))
+        action_table.add_column(style="command", min_width=20, no_wrap=True)
+        action_table.add_column(style="muted")
+        for action, description in actions:
+            action_table.add_row(action, description)
+
+        content = Table.grid()
+        content.width = content_width
+        content.add_row(Text("Start here", style="bold white"))
+        content.add_row("")
+        content.add_row(action_table)
+        self.console.print(Align.center(content))
+        self.console.print()
+
+    def run(self) -> None:
+        """Run the REPL main loop."""
+        # Show banner
+        stats = self._get_stats()
+        show_banner(self.console, self.project, stats, project_name=self.project.name)
+
+        # Onboarding if not indexed
+        if not stats:
+            self._show_onboarding()
+
+        # Show quick actions dashboard
+        self._show_dashboard()
+
+        # Ensure the project is in the registry
+        try:
+            self.project_registry.add(
+                self.project,
+                indexed=stats is not None,
+                file_count=stats.get("files", 0) if stats else 0,
+                symbol_count=stats.get("symbols", 0) if stats else 0,
+            )
+        except Exception:
+            pass
+
+        # Main loop
         while not self._should_quit:
             try:
-                # 使用 Rich 控制台读取输入
-                self.console.print()
-                user_input = self.console.input("[bold green]>[/] ")
+                session = self._get_prompt_session()
+                prompt_text = prompt_string(self.project.name, self._is_indexed())
+                user_input = session.prompt(prompt_text)
                 self._handle_input(user_input)
             except KeyboardInterrupt:
-                self.console.print("\n[dim]Type /quit to exit[/]")
+                self.console.print(
+                    Text(
+                        "  Type /quit to exit",
+                        style="dim",
+                    )
+                )
                 continue
             except EOFError:
                 break
             except Exception as e:
-                self.console.print(f"[red]Error: {e}[/]")
+                self.console.print(
+                    Text(
+                        f"  Error: {e}",
+                        style="red",
+                    )
+                )
 
-        self.console.print("[dim]Goodbye![/]")
+        self.console.print(Text("  Goodbye!", style="dim"))
 
 
 def run_repl(project_path: Path | None = None) -> None:
-    """运行 REPL 的便捷函数。
+    """Run the REPL.
 
     Args:
-        project_path: 项目路径
+        project_path: Project path
     """
     repl = RepoMindREPL(project_path)
     repl.run()

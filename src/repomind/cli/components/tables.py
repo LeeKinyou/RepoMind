@@ -1,16 +1,20 @@
-"""Table components for RepoMind CLI."""
+"""Table components for RepoMind CLI.
+
+Design: minimal borders, strong typography, no full-box layout.
+Uses indentation and subtle separators instead of heavy panels.
+"""
+
 from rich.console import Console
-from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich.syntax import Syntax
-from rich import box
+from rich.rule import Rule
 
 from repomind.models.schemas import SymbolInfo, SymbolType
 
 
 def _get_type_style(sym_type: SymbolType) -> str:
-    """获取符号类型的显示样式。"""
+    """Get display style for a symbol type."""
     styles = {
         SymbolType.CLASS: "bold cyan",
         SymbolType.FUNCTION: "bold green",
@@ -25,36 +29,27 @@ def _get_type_style(sym_type: SymbolType) -> str:
 
 
 def _get_type_icon(sym_type: SymbolType) -> str:
-    """获取符号类型的图标。"""
+    """Get a short text icon for a symbol type."""
     icons = {
-        SymbolType.CLASS: "[C]",
-        SymbolType.FUNCTION: "[F]",
-        SymbolType.METHOD: "[M]",
-        SymbolType.VARIABLE: "[V]",
-        SymbolType.MODULE: "[D]",
-        SymbolType.INTERFACE: "[I]",
-        SymbolType.ENUM: "[E]",
-        SymbolType.PROPERTY: "[P]",
+        SymbolType.CLASS: "C",
+        SymbolType.FUNCTION: "F",
+        SymbolType.METHOD: "M",
+        SymbolType.VARIABLE: "V",
+        SymbolType.MODULE: "D",
+        SymbolType.INTERFACE: "I",
+        SymbolType.ENUM: "E",
+        SymbolType.PROPERTY: "P",
     }
-    return icons.get(sym_type, "[?]")
+    return icons.get(sym_type, "?")
 
 
 def show_index_stats(console: Console, stats: dict) -> None:
-    """显示索引统计信息。
+    """Display index statistics as a clean key-value list (no panel).
 
     Args:
-        console: Rich 控制台实例
-        stats: 统计信息字典
+        console: Rich console instance
+        stats: Statistics dict
     """
-    table = Table(
-        box=box.ROUNDED,
-        show_header=False,
-        padding=(0, 2),
-        border_style="cyan",
-    )
-    table.add_column(style="dim", min_width=12)
-    table.add_column(style="bold white")
-
     items = [
         ("files", "Files"),
         ("symbols", "Symbols"),
@@ -64,15 +59,26 @@ def show_index_stats(console: Console, stats: dict) -> None:
         ("calls", "Calls"),
     ]
 
+    # Header
+    console.print(Text("Index stats", style="bold cyan"))
+    console.print(Rule(style="dim", characters="─"))
+
+    # Two-column compact layout
+    table = Table(
+        box=None,
+        show_header=False,
+        padding=(0, 2),
+        show_edge=False,
+    )
+    table.add_column(style="dim", min_width=12)
+    table.add_column(style="bold white")
+
     for key, label in items:
         if key in stats:
             table.add_row(label, f"{stats[key]:,}")
 
-    console.print(Panel(
-        table,
-        title="[bold cyan]Index Stats[/]",
-        border_style="cyan",
-    ))
+    console.print(table)
+    console.print()
 
 
 def show_search_results(
@@ -81,78 +87,80 @@ def show_search_results(
     results: list[SymbolInfo],
     elapsed: float,
     project_path: str = "",
-) -> None:
-    """显示搜索结果。
+) -> list[SymbolInfo]:
+    """Display search results as a clean numbered list.
+
+    Design: no enclosing panel. Header line + numbered items + footer hint.
+    Each item is a single line with type icon, name, location, and docstring.
 
     Args:
-        console: Rich 控制台实例
-        query: 查询文本
-        results: 搜索结果列表
-        elapsed: 耗时（秒）
-        project_path: 项目路径（用于显示相对路径）
+        console: Rich console instance
+        query: Query text
+        results: Search result list
+        elapsed: Elapsed seconds
+        project_path: Project path (for relative path display)
+
+    Returns:
+        The results list (for interactive selection by the caller)
     """
     if not results:
-        console.print(Panel(
-            f"[yellow]未找到与 [bold]{query}[/] 相关的结果[/]",
-            title="[bold yellow]🔍 查询结果[/]",
-            border_style="yellow",
-        ))
-        return
+        console.print()
+        line = Text()
+        line.append("  No results for ", style="dim")
+        line.append(query, style="yellow")
+        console.print(line)
+        console.print()
+        return results
 
-    # 创建结果表格
-    table = Table(
-        box=box.SIMPLE,
-        show_header=False,
-        padding=(0, 1),
-        show_edge=False,
-    )
-    table.add_column(width=4, style="dim")
-    table.add_column(min_width=30)
-    table.add_column(min_width=40)
+    # Header — query and count on one line
+    console.print()
+    header = Text()
+    header.append("  results for ", style="dim")
+    header.append(query, style="bold white")
+    header.append("  ", style="")
+    header.append(f"{len(results)}", style="bold cyan")
+    header.append(f" matches ({elapsed:.3f}s)", style="dim")
+    console.print(header)
+    console.print(Rule(style="dim", characters="─"))
 
+    # Results — numbered, one per line, no inner table borders
     for i, sym in enumerate(results, 1):
-        # 符号名称和类型
         type_style = _get_type_style(sym.type)
         type_icon = _get_type_icon(sym.type)
-        name_text = Text()
-        name_text.append(f"{i:>2}. ", style="dim")
-        name_text.append(f"{type_icon} {sym.name}", style=type_style)
-        name_text.append(f" ({sym.type.value})", style="dim")
 
-        # 文件位置
-        file_text = Text()
+        line = Text()
+        line.append(f"  {i:>2}. ", style="dim")
+        line.append(f"{type_icon} ", style=type_style)
+        line.append(sym.name, style=type_style)
+        line.append(f"  ({sym.type.value})", style="dim")
+
+        # File location
         file_path = sym.file_path
         if project_path and file_path.startswith(project_path):
-            file_path = file_path[len(project_path):].lstrip("/\\")
-        file_text.append(f"@ {file_path}:{sym.start_line}", style="dim cyan")
+            file_path = file_path[len(project_path) :].lstrip("/\\")
+        line.append(f"  {file_path}:{sym.start_line}", style="dim cyan")
 
-        # 文档字符串
-        doc_text = Text()
+        console.print(line)
+
+        # Docstring on indented second line (if present)
         if sym.docstring:
-            doc = sym.docstring.split("\n")[0][:60]
-            doc_text.append(f"# {doc}", style="dim italic")
+            doc = sym.docstring.split("\n")[0][:80]
+            doc_line = Text()
+            doc_line.append(f"      {doc}", style="dim italic")
+            console.print(doc_line)
 
-        table.add_row(name_text, file_text, doc_text)
-
-    # 显示结果
-    header = Text()
-    header.append(f"Found ", style="white")
-    header.append(f"{len(results)}", style="bold cyan")
-    header.append(f" results ", style="white")
-    header.append(f"({elapsed:.3f}s)", style="dim cyan")
-
-    console.print(Panel(
-        table,
-        title=f"[bold cyan]Search: {query}[/]",
-        subtitle=header,
-        border_style="cyan",
-        padding=(1, 2),
-    ))
-
-    # 提示信息
     console.print()
-    console.print("  [dim]Use /show <name> for details, /graph <name> for call graph[/]")
+    # Footer hint
+    hint = Text()
+    hint.append("  Tip: ", style="dim cyan")
+    hint.append("/show <name>", style="cyan")
+    hint.append(" for details, ", style="dim")
+    hint.append("/graph <name>", style="cyan")
+    hint.append(" for call graph", style="dim")
+    console.print(hint)
     console.print()
+
+    return results
 
 
 def show_symbol_detail(
@@ -162,85 +170,166 @@ def show_symbol_detail(
     callees: list[dict] | None = None,
     source_code: str | None = None,
 ) -> None:
-    """显示符号详情。
+    """Display symbol details with clean sectioned layout (no enclosing panel).
 
     Args:
-        console: Rich 控制台实例
-        symbol: 符号信息
-        callers: 调用者列表
-        callees: 被调用者列表
-        source_code: 源代码
+        console: Rich console instance
+        symbol: Symbol info
+        callers: Caller list
+        callees: Callee list
+        source_code: Source code
     """
     type_style = _get_type_style(symbol.type)
     type_icon = _get_type_icon(symbol.type)
 
-    # 创建信息表格
-    info = Table(box=box.SIMPLE, show_header=False, padding=(0, 1))
-    info.add_column(style="dim", min_width=8)
-    info.add_column()
+    # Header — symbol name and type
+    console.print()
+    header = Text()
+    header.append(f"  {type_icon} ", style=type_style)
+    header.append(symbol.name, style=type_style)
+    header.append(f"  ({symbol.type.value})", style="dim")
+    console.print(header)
+    console.print(Rule(style="dim", characters="─"))
 
-    info.add_row("Type", Text(f"{type_icon} {symbol.type.value}", style=type_style))
+    # Metadata — key/value pairs, indented
+    meta = Table(box=None, show_header=False, padding=(0, 2), show_edge=False)
+    meta.add_column(style="dim", min_width=10)
+    meta.add_column()
 
     if symbol.parent_class:
-        info.add_row("Parent", Text(symbol.parent_class, style="cyan"))
+        meta.add_row("parent", Text(symbol.parent_class, style="cyan"))
 
-    info.add_row("File", Text(f"{symbol.file_path}:{symbol.start_line}-{symbol.end_line}", style="dim cyan"))
+    meta.add_row(
+        "location",
+        Text(
+            f"{symbol.file_path}:{symbol.start_line}-{symbol.end_line}",
+            style="dim cyan",
+        ),
+    )
 
     if symbol.signature:
-        info.add_row("Signature", Text(symbol.signature, style="green"))
+        meta.add_row("signature", Text(symbol.signature, style="green"))
 
-    # 主面板内容
-    content_parts = [info]
+    console.print(meta)
+    console.print()
 
-    # 文档字符串
+    # Documentation section
     if symbol.docstring:
-        doc_text = Text()
-        doc_text.append("\nDocumentation\n", style="bold")
-        doc_text.append("─" * 60 + "\n", style="dim")
-        doc_text.append(symbol.docstring, style="white")
-        content_parts.append(doc_text)
+        console.print(Text("  Documentation", style="bold"))
+        console.print(Rule(style="dim", characters="─"))
+        for doc_line in symbol.docstring.split("\n"):
+            console.print(Text(f"  {doc_line}", style="white"))
+        console.print()
 
-    # 源代码
+    # Source code section
     if source_code:
-        code_text = Text()
-        code_text.append("\nSource Code\n", style="bold")
-        code_text.append("─" * 60 + "\n", style="dim")
-        content_parts.append(code_text)
-
+        console.print(Text("  Source", style="bold"))
+        console.print(Rule(style="dim", characters="─"))
         syntax = Syntax(
             source_code,
             "python",
             theme="monokai",
             line_numbers=True,
             start_line=symbol.start_line,
+            background_color="default",
         )
-        content_parts.append(syntax)
+        console.print(syntax)
+        console.print()
 
-    # 调用关系
+    # Call relations section
     if callers or callees:
-        relations = Text()
-        relations.append("\nCall Relations\n", style="bold")
-        relations.append("─" * 60 + "\n", style="dim")
+        console.print(Text("  Call relations", style="bold"))
+        console.print(Rule(style="dim", characters="─"))
 
         if callers:
-            relations.append(f"Called by ({len(callers)}):\n", style="bold")
+            console.print(Text(f"  Called by ({len(callers)}):", style="dim"))
             for c in callers[:10]:
-                relations.append(f"  <- {c.get('name', '?')}\n", style="dim")
+                line = Text()
+                line.append("    ← ", style="dim")
+                line.append(c.get("name", "?"), style="white")
+                if c.get("type"):
+                    line.append(f"  ({c['type']})", style="dim")
+                console.print(line)
 
         if callees:
-            relations.append(f"\nCalls ({len(callees)}):\n", style="bold")
+            if callers:
+                console.print()
+            console.print(Text(f"  Calls ({len(callees)}):", style="dim"))
             for c in callees[:10]:
-                relations.append(f"  -> {c.get('name', '?')}\n", style="dim")
+                line = Text()
+                line.append("    → ", style="dim")
+                line.append(c.get("name", "?"), style="white")
+                if c.get("type"):
+                    line.append(f"  ({c['type']})", style="dim")
+                console.print(line)
+        console.print()
 
-        content_parts.append(relations)
 
-    # 组合内容
-    from rich.console import Group
-    content = Group(*content_parts)
+def show_paged_source(
+    console: Console,
+    source_code: str,
+    start_line: int,
+    page_size: int = 40,
+) -> None:
+    """Display source code with pagination for long snippets.
 
-    console.print(Panel(
-        content,
-        title=f"[bold {type_style}]{type_icon} {symbol.name}[/]",
-        border_style="cyan",
-        padding=(1, 2),
-    ))
+    Args:
+        console: Rich console instance
+        source_code: Source code text
+        start_line: Starting line number
+        page_size: Lines per page (default 40)
+    """
+    lines = source_code.split("\n")
+    total = len(lines)
+
+    if total <= page_size:
+        syntax = Syntax(
+            source_code,
+            "python",
+            theme="monokai",
+            line_numbers=True,
+            start_line=start_line,
+            background_color="default",
+        )
+        console.print(syntax)
+        return
+
+    page_start = 0
+    page_num = 1
+    while page_start < total:
+        page_end = min(page_start + page_size, total)
+        page_lines = lines[page_start:page_end]
+        page_text = "\n".join(page_lines)
+
+        console.print()
+        syntax = Syntax(
+            page_text,
+            "python",
+            theme="monokai",
+            line_numbers=True,
+            start_line=start_line + page_start,
+            background_color="default",
+        )
+        console.print(syntax)
+
+        info = Text()
+        info.append(
+            f"  [lines {start_line + page_start}-{start_line + page_end - 1} of {start_line + total - 1}] ",
+            style="dim",
+        )
+        if page_end < total:
+            info.append("Press Enter to continue, q to quit", style="dim cyan")
+        console.print(info)
+
+        if page_end >= total:
+            break
+
+        try:
+            choice = input().strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            break
+        if choice in ("q", "quit", "exit"):
+            break
+
+        page_start = page_end
+        page_num += 1

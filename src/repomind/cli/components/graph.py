@@ -1,15 +1,19 @@
-"""Graph visualization component for RepoMind CLI."""
+"""Graph visualization component for RepoMind CLI.
+
+Design: clean tree output, no enclosing panel. Uses indentation and
+subtle separators instead of heavy box borders.
+"""
+
 from rich.console import Console
-from rich.panel import Panel
 from rich.text import Text
 from rich.tree import Tree
-from rich import box
+from rich.rule import Rule
 
 from repomind.models.schemas import CallGraphResult, SymbolType
 
 
 def _get_node_style(sym_type: SymbolType) -> str:
-    """获取节点样式。"""
+    """Get display style for a node type."""
     styles = {
         SymbolType.CLASS: "bold cyan",
         SymbolType.FUNCTION: "bold green",
@@ -19,13 +23,13 @@ def _get_node_style(sym_type: SymbolType) -> str:
 
 
 def _get_node_icon(sym_type: SymbolType) -> str:
-    """获取节点图标。"""
+    """Get icon for a node type."""
     icons = {
-        SymbolType.CLASS: "[C]",
-        SymbolType.FUNCTION: "[F]",
-        SymbolType.METHOD: "[M]",
+        SymbolType.CLASS: "C",
+        SymbolType.FUNCTION: "F",
+        SymbolType.METHOD: "M",
     }
-    return icons.get(sym_type, "[?]")
+    return icons.get(sym_type, "?")
 
 
 def show_call_graph(
@@ -34,33 +38,31 @@ def show_call_graph(
     root_symbol: str,
     depth: int = 2,
 ) -> None:
-    """显示调用图。
+    """Display call graph as a clean tree (no enclosing panel).
 
     Args:
-        console: Rich 控制台实例
-        graph: 调用图结果
-        root_symbol: 根符号名称
-        depth: 图深度
+        console: Rich console instance
+        graph: Call graph result
+        root_symbol: Root symbol name
+        depth: Graph depth
     """
     if not graph.nodes:
-        console.print(Panel(
-            "[yellow]No call graph found[/]",
-            title="[bold yellow]Call Graph[/]",
-            border_style="yellow",
-        ))
+        console.print()
+        line = Text()
+        line.append("  No call graph found", style="yellow")
+        console.print(line)
+        console.print()
         return
 
-    # 构建邻接表
+    # Build adjacency list
     adj: dict[str, list[str]] = {}
     for edge in graph.edges:
         if edge.source not in adj:
             adj[edge.source] = []
         adj[edge.source].append(edge.target)
 
-    # 构建节点映射
     node_map = {n.qualified_name: n for n in graph.nodes}
 
-    # 创建树形结构
     def build_tree(node_name: str, visited: set, current_depth: int) -> Tree:
         node = node_map.get(node_name)
         if node:
@@ -70,7 +72,7 @@ def show_call_graph(
             label.append(f"{icon} ", style=style)
             label.append(node.name, style=style)
             if node.qualified_name == root_symbol:
-                label.append(" <- root", style="bold yellow")
+                label.append("  (root)", style="bold yellow")
         else:
             label = Text(node_name, style="white")
 
@@ -85,7 +87,7 @@ def show_call_graph(
 
         return tree
 
-    # 找到根节点
+    # Find root node
     root_node = None
     for n in graph.nodes:
         if n.qualified_name == root_symbol:
@@ -95,26 +97,28 @@ def show_call_graph(
     if not root_node:
         root_node = graph.nodes[0]
 
-    # 构建树
+    # Header
+    console.print()
+    header = Text()
+    header.append("  call graph: ", style="dim")
+    header.append(root_symbol, style="bold cyan")
+    header.append(f"  (depth={depth})", style="dim")
+    console.print(header)
+    console.print(Rule(style="dim", characters="─"))
+
+    # Tree
     visited = {root_node.qualified_name}
     tree = build_tree(root_node.qualified_name, visited, 0)
+    console.print(tree)
 
-    # 统计信息
-    stats_text = Text()
-    stats_text.append(f"\nStats: ", style="dim")
-    stats_text.append(f"{len(graph.nodes)}", style="bold cyan")
-    stats_text.append(f" nodes, ", style="dim")
-    stats_text.append(f"{len(graph.edges)}", style="bold cyan")
-    stats_text.append(f" edges", style="dim")
-
-    # 显示
-    console.print(Panel(
-        tree,
-        title=f"[bold cyan]Call Graph: {root_symbol} (depth={depth})[/]",
-        subtitle=stats_text,
-        border_style="cyan",
-        padding=(1, 2),
-    ))
+    # Stats footer
+    stats = Text()
+    stats.append(f"  {len(graph.nodes)}", style="bold cyan")
+    stats.append(" nodes, ", style="dim")
+    stats.append(f"{len(graph.edges)}", style="bold cyan")
+    stats.append(" edges", style="dim")
+    console.print(stats)
+    console.print()
 
 
 def show_call_graph_text(
@@ -123,20 +127,16 @@ def show_call_graph_text(
     root_symbol: str,
     depth: int = 2,
 ) -> None:
-    """以文本格式显示调用图（用于 Mermaid 导出）。
+    """Display call graph as Mermaid text (for export).
 
     Args:
-        console: Rich 控制台实例
-        graph: 调用图结果
-        root_symbol: 根符号名称
-        depth: 图深度
+        console: Rich console instance
+        graph: Call graph result
+        root_symbol: Root symbol name
+        depth: Graph depth
     """
     lines = ["graph TD"]
 
-    # 构建节点映射
-    node_map = {n.qualified_name: n for n in graph.nodes}
-
-    # 添加节点
     for node in graph.nodes:
         safe_id = node.qualified_name.replace(".", "_").replace("/", "_")
         name = node.name
@@ -146,7 +146,6 @@ def show_call_graph_text(
             style = "class" if node.type == SymbolType.CLASS else "func"
             lines.append(f"    {safe_id}[{name}]:::{style}")
 
-    # 添加边
     seen_edges = set()
     for edge in graph.edges:
         src = edge.source.replace(".", "_").replace("/", "_")
@@ -156,7 +155,6 @@ def show_call_graph_text(
             seen_edges.add(edge_key)
             lines.append(f"    {src} -->|{edge.relation_type.value}| {tgt}")
 
-    # 添加样式
     lines.append("")
     lines.append("    classDef root fill:#f9f,stroke:#333,stroke-width:4px")
     lines.append("    classDef class fill:#bbf,stroke:#333")
@@ -164,13 +162,16 @@ def show_call_graph_text(
 
     mermaid_code = "\n".join(lines)
 
-    # 显示
     from rich.syntax import Syntax
-    syntax = Syntax(mermaid_code, "text", theme="monokai")
+    from rich.rule import Rule
 
-    console.print(Panel(
-        syntax,
-        title=f"[bold cyan]🌐 Mermaid 调用图: {root_symbol}[/]",
-        border_style="cyan",
-        padding=(1, 2),
-    ))
+    console.print()
+    header = Text()
+    header.append("  mermaid: ", style="dim")
+    header.append(root_symbol, style="bold cyan")
+    console.print(header)
+    console.print(Rule(style="dim", characters="─"))
+
+    syntax = Syntax(mermaid_code, "text", theme="monokai", background_color="default")
+    console.print(syntax)
+    console.print()

@@ -1,4 +1,5 @@
 """Quit command for RepoMind CLI."""
+
 from dataclasses import dataclass, field
 
 from repomind.cli.commands import registry
@@ -9,7 +10,7 @@ class QuitCommand:
     """Quit command."""
 
     name: str = "/quit"
-    aliases: list[str] = field(default_factory=lambda: ["/exit", "/q"])
+    aliases: list[str] = field(default_factory=lambda: ["/exit", "/x"])
     description: str = "Exit program"
 
     # Dependencies

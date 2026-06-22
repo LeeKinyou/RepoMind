@@ -1,10 +1,12 @@
 """Commands for RepoMind CLI."""
+
 from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable
 class Command(Protocol):
     """Command protocol。"""
+
     name: str
     aliases: list[str]
     description: str

@@ -1,7 +1,13 @@
 """Progress indicator component for RepoMind CLI."""
+
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-from rich.live import Live
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TaskProgressColumn,
+)
 from contextlib import contextmanager
 
 
@@ -24,7 +30,7 @@ def show_progress(console: Console, description: str = "处理中..."):
         console=console,
         transient=True,
     ) as progress:
-        task = progress.add_task(description, total=None)
+        progress.add_task(description, total=None)
         yield progress
 
 

@@ -1,4 +1,5 @@
 """Main entry point for RepoMind CLI."""
+
 from repomind.cli.app import app
 
 
