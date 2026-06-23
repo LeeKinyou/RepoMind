@@ -14,6 +14,12 @@ from repomind.models.schemas import (
     CallGraphResult,
     FileInfo,
 )
+from repomind.models.diagnostic import (
+    DiagnosticHypothesis,
+    DiagnosticState,
+    ToolInvocation,
+)
+from repomind.models.evidence import Evidence, EvidenceBundle
 
 __all__ = [
     "SymbolType",
@@ -28,4 +34,9 @@ __all__ = [
     "FixResult",
     "CallGraphResult",
     "FileInfo",
+    "Evidence",
+    "EvidenceBundle",
+    "DiagnosticHypothesis",
+    "DiagnosticState",
+    "ToolInvocation",
 ]
