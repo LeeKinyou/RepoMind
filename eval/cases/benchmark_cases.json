@@ -1,0 +1,61 @@
+[
+  {
+    "case_id": "case_001",
+    "type": "Code Query",
+    "query": "How is Python source code parsed using Tree-sitter?",
+    "expected_files": [
+      "src/repomind/core/parser/tree_sitter_parser.py"
+    ],
+    "expected_functions": [
+      "parse_file",
+      "parse_source"
+    ]
+  },
+  {
+    "case_id": "case_002",
+    "type": "Code Query",
+    "query": "How are call graph dependencies built?",
+    "expected_files": [
+      "src/repomind/core/call_graph/graph_builder.py"
+    ],
+    "expected_functions": [
+      "build"
+    ]
+  },
+  {
+    "case_id": "case_003",
+    "type": "Code Query",
+    "query": "Where is progressive type inference performed?",
+    "expected_files": [
+      "src/repomind/core/type_inference/inference_engine.py"
+    ],
+    "expected_functions": [
+      "infer",
+      "infer_symbol"
+    ]
+  },
+  {
+    "case_id": "case_004",
+    "type": "Stack Trace",
+    "query": "AttributeError: 'NoneType' object has no attribute 'get_symbol_by_qualified_name' in query_service.py",
+    "expected_files": [
+      "src/repomind/services/query_service.py"
+    ],
+    "expected_functions": [
+      "search",
+      "get_symbol_info"
+    ]
+  },
+  {
+    "case_id": "case_005",
+    "type": "Code Query",
+    "query": "How does HybridRetriever combine BM25 and graph expansion?",
+    "expected_files": [
+      "src/repomind/core/retrieval/hybrid_retriever.py"
+    ],
+    "expected_functions": [
+      "retrieve",
+      "_rrf_fuse"
+    ]
+  }
+]

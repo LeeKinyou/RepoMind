@@ -35,3 +35,42 @@ class EvidenceBundle(BaseModel):
     relations: list[SymbolRelation] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     degraded_features: list[str] = Field(default_factory=list)
+    metadata: dict[str, object] = Field(default_factory=dict)
+
+    def to_legacy_result(self) -> "RCAResult":
+        from repomind.models.schemas import RCAResult, EvidenceItem
+
+        root_cause = self.summary or "Unknown Error"
+        evidences = []
+        call_chain = []
+        for ev in self.evidences:
+            evidences.append(
+                EvidenceItem(
+                    file_path=ev.file_path,
+                    symbol=ev.symbol,
+                    start_line=ev.start_line,
+                    end_line=ev.end_line,
+                    snippet=ev.snippet or "",
+                    source=ev.source,
+                    score=ev.relevance_score,
+                    why_relevant=ev.reason,
+                )
+            )
+            if ev.source == "trace":
+                call_chain.append(f"{ev.file_path}:{ev.start_line} in {ev.symbol}")
+        
+        confidence = 0.0
+        if evidences:
+            confidence = 0.8 if self.symbols else 0.4
+
+        return RCAResult(
+            root_cause=root_cause,
+            confidence=confidence,
+            affected_symbols=self.symbols,
+            call_chain=call_chain,
+            explanation="Deterministic evidence collection mode (LLM disabled).",
+            suggested_fix=None,
+            evidence=[],
+            evidences=evidences,
+            verification_command="uv run pytest"
+        )

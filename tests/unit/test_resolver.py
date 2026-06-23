@@ -25,24 +25,24 @@ class TestResolveCallee:
     def test_self_call(self):
         call = {"target": "bar", "call_type": "self"}
         result = SymbolResolver.resolve_callee(call, "pkg.MyClass", {})
-        assert result == "pkg.MyClass.bar"
+        assert result == ("pkg.MyClass.bar", "self_method", 1.0)
 
     def test_direct_call_in_index(self):
         call = {"target": "foo", "call_type": "direct"}
         index = {"foo": ["pkg.module.foo"]}
         result = SymbolResolver.resolve_callee(call, None, index)
-        assert result == "pkg.module.foo"
+        assert result == ("pkg.module.foo", "exact_match", 1.0)
 
     def test_partial_match_in_index(self):
         call = {"target": "foo", "call_type": "direct"}
         index = {"bar": ["pkg.module.foo"]}
         result = SymbolResolver.resolve_callee(call, None, index)
-        assert result == "foo"
+        assert result == ("foo", "unresolved", 0.0)
 
     def test_not_in_index_returns_target(self):
         call = {"target": "external_func", "call_type": "direct"}
         result = SymbolResolver.resolve_callee(call, None, {})
-        assert result == "external_func"
+        assert result == ("external_func", "unresolved", 0.0)
 
     def test_empty_target_returns_none(self):
         call = {"target": "", "call_type": "direct"}

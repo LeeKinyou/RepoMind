@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from repomind.services.index_service import IndexService
 from repomind.services.rca_service import RCAService
 
 
@@ -37,7 +38,30 @@ RuntimeError: something failed"""
         result = rca_service.analyze_trace("")
         assert result.confidence == 0.0
 
-    def test_extract_error_info(self, rca_service):
-        error_type, msg = rca_service._extract_error_info("ValueError: invalid literal")
-        assert error_type == "ValueError"
-        assert "invalid literal" in msg
+
+class TestTraceEvidenceMode:
+    def test_collect_trace_evidence_is_deterministic_and_citable(self, tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+        source = project / "app.py"
+        source.write_text(
+            "def run():\n    raise RuntimeError('boom')\n",
+            encoding="utf-8",
+        )
+        index_dir = project / ".repomind"
+        IndexService(index_dir=str(index_dir)).index_directory(str(project))
+        service = RCAService(index_dir=str(index_dir))
+
+        trace = f"""Traceback (most recent call last):
+  File "{source}", line 2, in run
+    raise RuntimeError("boom")
+RuntimeError: boom"""
+
+        bundle = service.collect_trace_evidence(trace)
+
+        assert bundle.evidences
+        assert bundle.evidences[0].source == "trace"
+        assert bundle.evidences[0].symbol == "app.run"
+        assert "raise RuntimeError" in (bundle.evidences[0].snippet or "")
+        assert bundle.metadata["error_type"] == "RuntimeError"
+        assert bundle.metadata["proximate_cause"]["file_path"] == "app.py"

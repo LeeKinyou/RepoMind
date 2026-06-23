@@ -67,7 +67,9 @@ class SymbolRelation(BaseModel):
     target: str  # qualified_name
     relation_type: RelationType
     line_number: int | None = None
-    weight: float = Field(default=1.0, ge=0.0, le=1.0)
+    weight: float = Field(default=1.0, ge=0.0, le=1.0)  # Legacy, use confidence
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    resolution: str | None = None
 
 
 # === 索引模型 ===

@@ -298,6 +298,9 @@ def diagnose(
     json_format: bool = typer.Option(
         False, "--json", help="Export in JSON format instead of Markdown"
     ),
+    mode: str = typer.Option(
+        "evidence", "--mode", "-m", help="Diagnostic mode: 'evidence' or 'agent'"
+    ),
 ):
     """Run root cause analysis on a trace and save structured Markdown/JSON evidence report."""
     from repomind.cli.repl import RepoMindREPL
@@ -312,18 +315,30 @@ def diagnose(
         raise typer.Exit(1)
 
     trace = trace_path.read_text(encoding="utf-8")
-
-    with console.status("[bold blue]Analyzing trace and generating report..."):
-        result = repl.rca_service.analyze_trace(trace)
-
     query = trace.strip().split("\n")[-1] if trace.strip() else ""
 
-    if json_format:
-        report_content = EvidenceReporter.generate_json_report(result, query=query)
-        default_filename = "diagnose_report.json"
+    if mode == "agent":
+        from repomind.agent.diagnostic_agent import DiagnosticAgent
+        with console.status("[bold blue]Running Diagnostic Agent loop..."):
+            agent = DiagnosticAgent(index_dir=str(proj / ".repomind"))
+            state = agent.run(trace)
+        
+        if json_format:
+            report_content = state.model_dump_json(indent=2)
+            default_filename = "diagnose_report.json"
+        else:
+            report_content = EvidenceReporter.generate_agent_report(state)
+            default_filename = "diagnose_report.md"
     else:
-        report_content = EvidenceReporter.generate_markdown_report(result, query=query)
-        default_filename = "diagnose_report.md"
+        with console.status("[bold blue]Analyzing trace and generating report..."):
+            result = repl.rca_service.analyze_trace(trace)
+
+        if json_format:
+            report_content = EvidenceReporter.generate_json_report(result, query=query)
+            default_filename = "diagnose_report.json"
+        else:
+            report_content = EvidenceReporter.generate_markdown_report(result, query=query)
+            default_filename = "diagnose_report.md"
 
     out_path = Path(output or default_filename).resolve()
     EvidenceReporter.save_report(report_content, str(out_path))

@@ -32,7 +32,7 @@ class SymbolResolver:
         call: Mapping[str, Any],
         caller_class: str | None,
         symbol_index: dict[str, list[str]],
-    ) -> str | None:
+    ) -> tuple[str, str, float] | None:
         """Resolve callee qualified name from a call dict.
 
         Args:
@@ -41,28 +41,35 @@ class SymbolResolver:
             symbol_index: Mapping of symbol short names to lists of qualified names.
 
         Returns:
-            Qualified name of the callee, or ``None`` if unresolvable.
+            Tuple of (Qualified name of the callee, resolution strategy, confidence), or ``None`` if unresolvable.
         """
         target = call.get("target", "")
+        if not target:
+            return None
         call_type = call.get("call_type", "direct")
 
         if call_type == "self" and caller_class:
-            return f"{caller_class}.{target}"
+            return f"{caller_class}.{target}", "self_method", 1.0
 
         if target in symbol_index:
             candidates = symbol_index[target]
-            # Prefer exact match, then first candidate
+            # Prefer exact match in same module
             if caller_class:
+                module_prefix = caller_class.rsplit(".", 1)[0] + "."
                 for qname in candidates:
-                    if qname.startswith(caller_class.rsplit(".", 1)[0] + "."):
-                        return qname
-            return candidates[0]
+                    if qname.startswith(module_prefix):
+                        return qname, "module_match", 0.9
+            if len(candidates) == 1:
+                return candidates[0], "exact_match", 1.0
+            return candidates[0], "first_candidate", 1.0 / len(candidates)
 
         # Fast suffix match using target's last part (fixes H2)
         last_part = target.split(".")[-1] if "." in target else target
         if last_part in symbol_index:
-            for qname in symbol_index[last_part]:
+            candidates = symbol_index[last_part]
+            for qname in candidates:
                 if qname.endswith(f".{target}") or qname == target:
-                    return qname
+                    confidence = 1.0 if len(candidates) == 1 else 0.8
+                    return qname, "suffix_match", confidence
 
-        return target if target else None
+        return target, "unresolved", 0.0

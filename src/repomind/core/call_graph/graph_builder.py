@@ -90,16 +90,19 @@ class CallGraphBuilder:
         for pf in parsed_files:
             for call in pf.calls:
                 caller_qname = SymbolResolver.resolve_caller(call, pf.path)
-                callee_qname = SymbolResolver.resolve_callee(
+                callee_result = SymbolResolver.resolve_callee(
                     call, call.get("caller_class"), self._symbol_index
                 )
-                if caller_qname and callee_qname:
+                if caller_qname and callee_result:
+                    callee_qname, resolution, confidence = callee_result
                     self.graph.add_relation(
                         SymbolRelation(
                             source=caller_qname,
                             target=callee_qname,
                             relation_type=RelationType.CALLS,
                             line_number=call.get("line_number"),
+                            confidence=confidence,
+                            resolution=resolution,
                         )
                     )
 

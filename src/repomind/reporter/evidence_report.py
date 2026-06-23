@@ -13,6 +13,72 @@ class EvidenceReporter:
     """Orchestrates creating and exporting structured diagnosis evidence reports."""
 
     @staticmethod
+    def generate_agent_report(state: "DiagnosticState") -> str:
+        """Format a DiagnosticState into a Markdown diagnosis report."""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        lines = [
+            "# RepoMind Agent Diagnosis Report",
+            f"**Generated At**: {timestamp}",
+            f"**Total Iterations**: {state.iteration}",
+            f"**Stop Reason**: {state.stop_reason or 'Unknown'}",
+            "",
+            "## 1. Issue",
+            f"```\n{state.issue}\n```",
+            "",
+            "## 2. Hypotheses",
+        ]
+        
+        if state.hypotheses:
+            for idx, hyp in enumerate(sorted(state.hypotheses, key=lambda h: h.confidence, reverse=True), 1):
+                lines.extend([
+                    f"### {idx}. {hyp.description}",
+                    f"- **Confidence**: {hyp.confidence:.2f}",
+                    f"- **Supporting Evidence IDs**: {', '.join(hyp.supporting_evidence_ids) or 'None'}",
+                    f"- **Conflicting Evidence IDs**: {', '.join(hyp.conflicting_evidence_ids) or 'None'}",
+                    ""
+                ])
+        else:
+            lines.append("*No hypotheses formulated.*")
+            lines.append("")
+
+        lines.append("## 3. Collected Evidence")
+        if state.evidences:
+            for idx, ev in enumerate(state.evidences, 1):
+                lines.extend([
+                    f"### Evidence: {ev.evidence_id}",
+                    f"- **Source**: `{ev.source}`",
+                    f"- **Symbol**: `{ev.symbol}`",
+                    f"- **File**: `{ev.file_path}:{ev.start_line}`",
+                    f"- **Reason**: {ev.reason}",
+                    ""
+                ])
+                if ev.snippet:
+                    lines.extend([
+                        "```python",
+                        ev.snippet,
+                        "```",
+                        ""
+                    ])
+        else:
+            lines.append("*No evidence collected.*")
+            lines.append("")
+
+        lines.append("## 4. Agent Tool Trace")
+        if state.tool_history:
+            for inv in state.tool_history:
+                status = "Success" if inv.success else f"Failed: {inv.error}"
+                lines.extend([
+                    f"- **Iter {inv.iteration}**: `{inv.tool_name}` -> {status}",
+                    f"  - Arguments: `{json.dumps(inv.arguments)}`",
+                    f"  - New Evidence: {len(inv.new_evidence_ids)}"
+                ])
+        else:
+            lines.append("*No tools invoked.*")
+            
+        lines.append("")
+        return "\n".join(lines)
+
+    @staticmethod
     def generate_markdown_report(
         rca_result: RCAResult, query: str | None = None
     ) -> str:

@@ -11,11 +11,33 @@ RepoMind 是一款面向大型代码仓库的 **Repository Intelligence Platform
 - **渐进式类型推断** — 6 策略级联推断算法，无需编译即可实现 70%+ 的 Python 类型推断准确率
 - **智能根因分析** — Stack Trace 逆向对齐 + 沙箱自愈验证，自动生成修复补丁并回归测试
 - **架构可视化** — 自动生成 Mermaid 调用图/依赖图，支持自定义展示层数，轻松理清调用脉络
-- **MCP 协议对接** — 提供标准 Stdio 协议的 MCP Server，能无缝集成至 Claude Desktop、Cursor 等外部 AI 智能体工作流
+- **双模式诊断** — 提供 Deterministic Evidence 模式（无需 LLM）和 Agent 模式（ReAct 循环）供不同场景选择
+- **MCP 协议对接** — 提供标准 Stdio 协议的官方 FastMCP Server，能无缝集成至 Claude Desktop、Cursor 等外部 AI 智能体工作流
 - **结构化证据报告** — 支持一键将 RCA 根因定位结果导出为包含详细诊断链、修复补丁和影响面评估的 Markdown / JSON 证据报告
 - **基准性能评估** — 内置评估框架与 Bug 基准用例，自动运行并统计 Top-1/Top-3 文件命中率、函数定位率等诊断效率指标
-- **Token 节省 90%+** — 单次查询仅消耗 ~5,000 Tokens，相比传统文件遍历节省 40 万 Tokens
-- **100% 本地运行** — 零配置开箱即用，无需联网，数据不离开本机
+- **100% 本地运行** — 零配置开箱即用，支持离线退避策略，数据不离开本机
+
+## 诊断双模式
+
+- **Evidence Mode** (`--mode evidence`): 纯检索增强。通过对输入的报错日志进行词法分割与精准匹配，配合 1-hop 静态图遍历，在不请求大模型的前提下快速召回报错相关的代码片段和调用证据。
+- **Agent Mode** (`--mode agent`): 主动诊断智能体。基于大模型驱动的 ReAct 受控循环（最多 5 轮）。它可以根据当前查找到的证据动态决定下一步是使用 `search_code` 还是 `expand_call_chain` 工具，直至得出高置信度的假设并输出最终诊断报告。
+
+## MCP 快速配置
+
+你可以将 RepoMind 作为 MCP Server 接入你的智能体开发流：
+
+### Claude Code 接入
+
+在你的项目中执行：
+```bash
+claude mcp add repomind uv run repomind mcp
+```
+
+### Cursor 接入
+
+在 Cursor 的 MCP 选项卡中，添加新 Server：
+- Type: `command`
+- Command: `uv run repomind mcp`
 
 ## 快速开始
 
@@ -62,11 +84,20 @@ repomind visualize AuthService --depth 3 --format mermaid
 | `repomind index <path>` | 构建代码仓库索引 | `repomind index ./src` |
 | `repomind query <question>` | 混合检索查询 | `repomind query "支付处理"` |
 | `repomind rca` | 交互式/文件根因分析 | `repomind rca --trace error.log` |
-| `repomind diagnose <trace_file>` | 根因分析并输出 Markdown/JSON 诊断证据报告 | `repomind diagnose error.log -o report.md` |
+| `repomind diagnose <trace_file>` | 根因分析并输出 Markdown/JSON 诊断证据报告 | `repomind diagnose error.log --mode agent -o report.md` |
 | `repomind visualize <symbol>` | 架构可视化 | `repomind visualize UserService --format mermaid` |
 | `repomind stats` | 显示索引统计 | `repomind stats` |
 | `repomind mcp` | 启动 Stdio 模式的 MCP Server 服务端口 | `repomind mcp` |
-| `repomind eval` | 运行内置 Bug 基准用例并自动评估命中率指标 | `repomind eval --project .` |
+| `repomind eval` | 运行基准评测 | `repomind eval --project .` |
+
+### 运行基准评测
+
+要对比不同模式下的诊断命中率：
+
+```bash
+uv run python eval/run_host_comparison.py --project .
+```
+详细的评测报告和方法论见 [Agent Benchmark](docs/testing/agent_benchmark.md)。
 
 ## 项目结构
 
