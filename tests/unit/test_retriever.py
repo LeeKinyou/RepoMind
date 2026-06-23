@@ -7,6 +7,7 @@ from repomind.core.retrieval.hybrid_retriever import (
     HybridRetriever,
     RetrievalResult,
 )
+from repomind.storage.graph_store import GraphStore
 
 
 class TestBM25Index:
@@ -99,3 +100,13 @@ class TestRRFFusion:
         fused = retriever._rrf_fuse(results, top_k=2)
         # y has higher score -> rank 1 -> higher RRF
         assert fused[0].symbol["qualified_name"] == "y"
+
+
+class TestVectorDegradation:
+    def test_reports_vector_search_degradation_when_extension_is_unavailable(self):
+        class StoreWithoutVectors:
+            vector_available = False
+
+        retriever = HybridRetriever(StoreWithoutVectors(), GraphStore())
+
+        assert retriever.degraded_features == ["vector_search"]

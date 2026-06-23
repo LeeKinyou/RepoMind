@@ -41,6 +41,7 @@ class BM25Index:
     def build(self, documents: list[dict]) -> None:
         """Build index from symbol documents."""
         from collections import defaultdict
+
         self.doc_freqs = []
         self.df = Counter()
         self.inverted_index = defaultdict(set)
@@ -62,15 +63,15 @@ class BM25Index:
         """Search and return (doc_index, score) pairs."""
         query_tokens = self._tokenize(query)
         scores = []
-        
+
         candidate_ids = set()
         for qt in query_tokens:
             if hasattr(self, "inverted_index"):
                 candidate_ids |= self.inverted_index.get(qt, set())
-        
+
         if not hasattr(self, "inverted_index"):
             candidate_ids = set(range(len(self.doc_freqs)))
-            
+
         for i in candidate_ids:
             freq = self.doc_freqs[i]
             score = 0.0
@@ -97,6 +98,11 @@ class HybridRetriever:
         self.graph = graph_store
         self.bm25 = BM25Index()
         self._built = False
+        self.degraded_features = (
+            []
+            if getattr(sqlite_store, "vector_available", False)
+            else ["vector_search"]
+        )
 
     def build_index(self) -> None:
         """Build BM25 index from all symbols in SQLite."""
@@ -143,18 +149,19 @@ class HybridRetriever:
         try:
             from repomind.utils.config import load_config
             import litellm
+
             config = load_config()
-            if config.llm.embedding_model:
+            if config.llm.embedding_model and getattr(
+                self.sqlite, "vector_available", False
+            ):
                 litellm_args = {}
                 if config.llm.api_key:
                     litellm_args["api_key"] = config.llm.api_key
                 if config.llm.base_url:
                     litellm_args["base_url"] = config.llm.base_url
-                
+
                 resp = litellm.embedding(
-                    model=config.llm.embedding_model,
-                    input=[query],
-                    **litellm_args
+                    model=config.llm.embedding_model, input=[query], **litellm_args
                 )
                 if resp.data:
                     query_emb = resp.data[0]["embedding"]
@@ -172,8 +179,11 @@ class HybridRetriever:
                         )
         except Exception as e:
             import logging
+
             # Log as debug so we don't spam the user if litellm is unconfigured or fails
-            logging.getLogger(__name__).debug("Vector search skipped (LLM error): %s", str(e).split('\n')[0])
+            logging.getLogger(__name__).debug(
+                "Vector search skipped (LLM error): %s", str(e).split("\n")[0]
+            )
 
         # Graph expansion from top BM25 hits
         graph_results = []

@@ -33,13 +33,16 @@ class TestLoadConfig:
     """H6: .env empty string should take precedence over env vars."""
 
     def test_default_config(self):
+        load_config.cache_clear()
         with patch.dict(os.environ, {}, clear=True):
             config = load_config(env_file="/nonexistent/.env")
             assert isinstance(config, AppConfig)
             assert config.llm.provider == "litellm"
+            assert config.llm.embedding_model == ""
 
     def test_env_vars_override_defaults(self):
         from repomind.utils.config import load_config
+
         load_config.cache_clear()
         with patch.dict(os.environ, {"REPOMIND_LLM_MODEL": "gpt-4"}, clear=True):
             config = load_config(env_file="/nonexistent/.env")
@@ -57,8 +60,11 @@ class TestLoadConfig:
 
     def test_invalid_timeout_uses_default(self):
         from repomind.utils.config import load_config
+
         load_config.cache_clear()
-        with patch.dict(os.environ, {"REPOMIND_SANDBOX_TIMEOUT": "invalid"}, clear=True):
+        with patch.dict(
+            os.environ, {"REPOMIND_SANDBOX_TIMEOUT": "invalid"}, clear=True
+        ):
             config = load_config(env_file="/nonexistent/.env")
             assert config.sandbox.timeout == 60
 

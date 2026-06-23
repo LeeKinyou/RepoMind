@@ -130,14 +130,17 @@ class SQLiteStore:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn: sqlite3.Connection | None = None
+        self.vector_available = False
         self._init_db()
 
     def _init_db(self) -> None:
         with self._connect() as conn:
             conn.executescript(_SCHEMA_SQL)
 
-    def init_vector_table(self, dimension: int) -> None:
+    def init_vector_table(self, dimension: int) -> bool:
         """Dynamically create the virtual vector table with the specified dimension."""
+        if not self.vector_available:
+            return False
         with self._connect() as conn:
             # Drop the table if it exists but has a different dimension
             # (sqlite-vec doesn't allow altering vec0 tables easily)
@@ -146,6 +149,7 @@ class SQLiteStore:
             conn.execute(
                 f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_symbols USING vec0(symbol_id INTEGER PRIMARY KEY, embedding float[{dimension}]);"
             )
+        return True
 
     def set_stat(self, key: str, value: int) -> None:
         with self._connect() as conn:
@@ -169,12 +173,19 @@ class SQLiteStore:
     def _get_conn(self) -> sqlite3.Connection:
         """Get or create a reusable database connection."""
         if self._conn is None:
-            import sqlite_vec
             self._conn = sqlite3.connect(str(self.db_path))
             self._conn.row_factory = sqlite3.Row
-            self._conn.enable_load_extension(True)
-            sqlite_vec.load(self._conn)
-            self._conn.enable_load_extension(False)
+            try:
+                import sqlite_vec
+            except ImportError:
+                self.vector_available = False
+            else:
+                self._conn.enable_load_extension(True)
+                try:
+                    sqlite_vec.load(self._conn)
+                    self.vector_available = True
+                finally:
+                    self._conn.enable_load_extension(False)
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA foreign_keys=ON")
         return self._conn
@@ -318,6 +329,7 @@ class SQLiteStore:
         """Insert a vector embedding for a symbol."""
         with self._connect() as conn:
             import json
+
             # Table might not exist if init_vector_table wasn't called yet
             try:
                 conn.execute(
@@ -327,10 +339,13 @@ class SQLiteStore:
             except sqlite3.OperationalError:
                 pass
 
-    def search_vectors(self, query_embedding: list[float], limit: int = 10) -> list[dict]:
+    def search_vectors(
+        self, query_embedding: list[float], limit: int = 10
+    ) -> list[dict]:
         """Search for similar symbols using L2 distance."""
         with self._read_connect() as conn:
             import json
+
             try:
                 rows = conn.execute(
                     """
@@ -341,7 +356,7 @@ class SQLiteStore:
                     WHERE embedding MATCH ? AND k = ?
                     ORDER BY distance
                     """,
-                    (json.dumps(query_embedding), limit)
+                    (json.dumps(query_embedding), limit),
                 ).fetchall()
                 return [dict(r) for r in rows]
             except sqlite3.OperationalError:
@@ -522,12 +537,16 @@ class SQLiteStore:
 
     def get_symbols_by_file_id(self, file_id: int) -> list[dict]:
         with self._read_connect() as conn:
-            rows = conn.execute("SELECT qualified_name FROM symbols WHERE file_id = ?", (file_id,)).fetchall()
+            rows = conn.execute(
+                "SELECT qualified_name FROM symbols WHERE file_id = ?", (file_id,)
+            ).fetchall()
             return [dict(r) for r in rows]
 
     def search_files_by_suffix(self, suffix: str) -> list[dict]:
         with self._read_connect() as conn:
-            rows = conn.execute("SELECT path FROM files WHERE path LIKE ?", (f"%{suffix}",)).fetchall()
+            rows = conn.execute(
+                "SELECT path FROM files WHERE path LIKE ?", (f"%{suffix}",)
+            ).fetchall()
             return [dict(r) for r in rows]
 
     def clear(self) -> None:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import builtins
+
 from repomind.models.schemas import SymbolInfo, SymbolType, FileInfo
 
 
@@ -13,6 +15,26 @@ class TestSQLiteStoreBasics:
         stats = sqlite_store.get_stats()
         assert stats["files"] == 0
         assert stats["symbols"] == 0
+
+    def test_basic_storage_works_without_sqlite_vec(self, tmp_dir, monkeypatch):
+        real_import = builtins.__import__
+
+        def import_without_sqlite_vec(name, *args, **kwargs):
+            if name == "sqlite_vec":
+                raise ImportError("sqlite-vec is not installed")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", import_without_sqlite_vec)
+
+        from repomind.storage.sqlite_store import SQLiteStore
+
+        store = SQLiteStore(str(tmp_dir / "without_vectors.db"))
+        try:
+            assert store.vector_available is False
+            assert store.get_stats()["files"] == 0
+            assert store.init_vector_table(3) is False
+        finally:
+            store.close()
 
 
 class TestFileOperations:
