@@ -16,14 +16,14 @@ def path_to_module(file_path: str, project_root: str = "") -> str:
         Python module path with dots (e.g., "auth.service").
     """
     p = Path(file_path)
-    if p.drive:
-        p = Path(str(p)[len(p.drive):])
     if project_root:
         try:
-            p = p.relative_to(project_root)
+            p = p.resolve().relative_to(Path(project_root).resolve())
         except ValueError:
             pass
-    posix = PurePosixPath(p)
+    if p.drive:
+        p = Path(str(p)[len(p.drive) :])
+    posix = PurePosixPath(p.as_posix())
     module = str(posix).replace("/", ".").replace(".py", "")
     if module.endswith(".__init__"):
         module = module[:-9]

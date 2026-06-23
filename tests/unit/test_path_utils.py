@@ -35,6 +35,13 @@ class TestPathToModule:
         result = path_to_module("C:\\Users\\dev\\project\\auth\\login.py")
         assert "auth.login" in result
 
+    def test_windows_absolute_path_is_relative_to_project_root(self):
+        result = path_to_module(
+            "C:\\Users\\dev\\project\\auth\\login.py",
+            "C:\\Users\\dev\\project",
+        )
+        assert result == "auth.login"
+
     def test_no_extension(self):
         result = path_to_module("auth/login")
         assert result == "auth.login"
