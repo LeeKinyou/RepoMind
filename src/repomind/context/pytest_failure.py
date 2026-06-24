@@ -7,7 +7,8 @@ import re
 from repomind.context.trace_parser import ExceptionInfo, ParsedFailure, TraceFrame
 
 _LOCATION_PATTERN = re.compile(
-    r"^(.+?\.py):(\d+):\s*([A-Za-z_][\w.]*)\s*$", re.MULTILINE
+    r"^(.+?\.py):(\d+):\s*([^\n]+?)(?:\n[ \t]+(?!E\s+)([^\n]+))?$", 
+    re.MULTILINE
 )
 _ERROR_DETAIL_PATTERN = re.compile(r"^\s*E\s+(.*)$", re.MULTILINE)
 
@@ -20,14 +21,22 @@ class PytestFailureParser:
 
     def parse(self, text: str) -> ParsedFailure:
         locations = list(_LOCATION_PATTERN.finditer(text))
-        frames = [
-            TraceFrame(
-                file_path=match.group(1),
-                line_number=int(match.group(2)),
-                function_name="<pytest>",
+        frames = []
+        for match in locations:
+            code_line = match.group(4).strip() if match.group(4) else None
+            if not code_line:
+                for line in text.splitlines():
+                    if line.strip().startswith(">"):
+                        code_line = line.strip().lstrip(">").strip()
+                        break
+            frames.append(
+                TraceFrame(
+                    file_path=match.group(1),
+                    line_number=int(match.group(2)),
+                    function_name="<pytest>",
+                    code_line=code_line,
+                )
             )
-            for match in locations
-        ]
 
         error_type = locations[-1].group(3) if locations else "AssertionError"
         details = [match.group(1).strip() for match in _ERROR_DETAIL_PATTERN.finditer(text)]

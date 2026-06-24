@@ -6,7 +6,10 @@ import re
 
 from repomind.context.trace_parser import ExceptionInfo, ParsedFailure, TraceFrame
 
-_FRAME_PATTERN = re.compile(r'^\s*File "([^"]+)", line (\d+), in (.+)$', re.MULTILINE)
+_FRAME_PATTERN = re.compile(
+    r'^\s*File "([^"]+)", line (\d+), in ([^\n]+)(?:\n[ \t]+(?!File ")([^\n]+))?$', 
+    re.MULTILINE
+)
 _EXCEPTION_PATTERN = re.compile(
     r"^([A-Za-z_][\w.]*(?:Error|Exception|Warning|Interrupt|Exit)):\s*(.*)$",
     re.MULTILINE,
@@ -25,6 +28,7 @@ class PythonTracebackParser:
                 file_path=match.group(1),
                 line_number=int(match.group(2)),
                 function_name=match.group(3).strip(),
+                code_line=match.group(4).strip() if match.group(4) else None,
             )
             for match in _FRAME_PATTERN.finditer(text)
         ]

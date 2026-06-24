@@ -18,6 +18,8 @@ ValueError: missing
     parsed = PythonTracebackParser().parse(text)
 
     assert [frame.function_name for frame in parsed.frames] == ["run", "load_user"]
+    assert parsed.frames[0].code_line == "load_user()"
+    assert parsed.frames[1].code_line == 'raise ValueError("missing")'
     assert parsed.exceptions[-1].type == "ValueError"
     assert parsed.exceptions[-1].message == "missing"
     assert parsed.proximate_frame.line_number == 12
@@ -61,6 +63,7 @@ tests/test_math.py:8: AssertionError
 
     assert parsed.frames[-1].file_path == "tests/test_math.py"
     assert parsed.frames[-1].line_number == 8
+    assert parsed.frames[-1].code_line == "assert total([1, 2]) == 4"
     assert parsed.exceptions[-1].type == "AssertionError"
     assert parsed.exceptions[-1].message == "assert 3 == 4"
 

@@ -11,6 +11,7 @@ class TraceFrame(BaseModel):
     file_path: str
     line_number: int = Field(ge=1)
     function_name: str
+    code_line: str | None = None
 
 
 class ExceptionInfo(BaseModel):
