@@ -76,47 +76,6 @@ class TestEvidenceReporter:
         assert out_file.read_text(encoding="utf-8") == "Test Content"
 
 
-class TestMCPServer:
-    def test_initialize_handshake(self):
-        server = MCPServer()
-        req = {"jsonrpc": "2.0", "method": "initialize", "id": 1}
-        res = server.handle_message(req)
-        assert res["id"] == 1
-        assert res["result"]["protocolVersion"] == "2024-11-05"
-        assert res["result"]["serverInfo"]["name"] == "repomind-mcp-server"
-        assert server.initialized is True
-
-    def test_tools_list_before_initialize(self):
-        server = MCPServer()
-        req = {"jsonrpc": "2.0", "method": "tools/list", "id": 2}
-        res = server.handle_message(req)
-        assert "error" in res
-        assert res["error"]["code"] == -32002
-
-    def test_tools_list_after_initialize(self):
-        server = MCPServer()
-        server.initialized = True
-        req = {"jsonrpc": "2.0", "method": "tools/list", "id": 3}
-        res = server.handle_message(req)
-        assert "result" in res
-        tools = res["result"]["tools"]
-        assert len(tools) == 4
-        tool_names = [t["name"] for t in tools]
-        assert "repomind.index_repo" in tool_names
-        assert "repomind.search_code" in tool_names
-        assert "repomind.expand_call_chain" in tool_names
-        assert "repomind.diagnose_issue" in tool_names
-
-    @patch(
-        "sys.stdin", StringIO('{"jsonrpc": "2.0", "method": "initialize", "id": 1}\n')
-    )
-    @patch("sys.stdout", new_callable=StringIO)
-    def test_server_loop(self, mock_stdout):
-        server = MCPServer()
-        server.start()
-        output = mock_stdout.getvalue()
-        assert "jsonrpc" in output
-        assert "2024-11-05" in output
 
 
 class TestRepoMindEvaluator:
@@ -190,7 +149,7 @@ class TestNewCLICoomands:
         trace_file.write_text("ZeroDivisionError: division by zero", encoding="utf-8")
 
         with patch(
-            "repomind.services.rca_service.RCAService.analyze_trace",
+            "repomind.context.context_builder.RCAService.analyze_trace",
             return_value=sample_rca_result,
         ):
             runner = CliRunner()
@@ -248,7 +207,7 @@ class TestNewCLICoomands:
 
 class TestRCAPathNormalization:
     def test_path_normalization(self, tmp_path):
-        from repomind.services.rca_service import RCAService
+        from repomind.context.context_builder import RCAService
         from pathlib import Path
 
         index_dir = tmp_path / ".repomind"
@@ -273,7 +232,7 @@ class TestRCAPathNormalization:
         )
 
     def test_path_normalization_db_fallback(self, tmp_path):
-        from repomind.services.rca_service import RCAService
+        from repomind.context.context_builder import RCAService
         from repomind.storage.sqlite_store import SQLiteStore
         from repomind.models.schemas import FileInfo
 

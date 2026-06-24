@@ -73,15 +73,15 @@ class RepoMindREPL:
         index_dir = self.project / ".repomind"
 
         def make_index_service():
-            from repomind.services.index_service import IndexService
+            from repomind.indexer.file_scanner import IndexService
             return IndexService(index_dir=str(index_dir))
 
         def make_query_service():
-            from repomind.services.query_service import QueryService
+            from repomind.retriever.query_service import QueryService
             return QueryService(index_dir=str(index_dir))
 
         def make_rca_service():
-            from repomind.services.rca_service import RCAService
+            from repomind.context.context_builder import RCAService
             return RCAService(index_dir=str(index_dir))
 
         self.index_service = LazyServiceProxy(make_index_service)
@@ -97,6 +97,7 @@ class RepoMindREPL:
         from repomind.cli.commands.query import register_query_command
         from repomind.cli.commands.show import register_show_command
         from repomind.cli.commands.graph import register_graph_command
+        from repomind.cli.commands.tree import register_tree_command
         from repomind.cli.commands.callers import register_callers_command
         from repomind.cli.commands.callees import register_callees_command
         from repomind.cli.commands.stats import register_stats_command
@@ -128,6 +129,7 @@ class RepoMindREPL:
         register_ask_command(self.console, self.project, self.query_service)
         register_show_command(self.console, self.project, self.query_service)
         register_graph_command(self.console, self.project, self.query_service)
+        register_tree_command(self.console, self.project, self.query_service)
         register_callers_command(self.console, self.project, self.query_service)
         register_callees_command(self.console, self.project, self.query_service)
         register_stats_command(self.console, self.project, self.index_service)

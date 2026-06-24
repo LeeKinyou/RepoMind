@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 
-from repomind.services.query_service import QueryService
+from repomind.retriever.query_service import QueryService
 from repomind.models.schemas import QueryOptions
 
 console = Console()
@@ -43,7 +43,7 @@ class RepoMindEvaluator:
         results = []
         total_top1_hits = 0
         total_top3_hits = 0
-        total_function_hits = 0
+        total_function_hits = 0.0
         total_cases = len(cases)
 
         console.print(
@@ -144,14 +144,14 @@ class RepoMindEvaluator:
         table.add_column("Function Hit Rate", justify="right")
         table.add_column("Latency (s)", justify="right")
 
-        for r in results:
+        for res in results:
             table.add_row(
-                r["case_id"],
-                r["type"],
-                "[green]PASSED[/green]" if r["top1_hit"] else "[red]FAILED[/red]",
-                "[green]PASSED[/green]" if r["top3_hit"] else "[red]FAILED[/red]",
-                f"{r['func_hit_rate'] * 100:.1f}%",
-                f"{r['elapsed']:.3f}s",
+                res["case_id"],
+                res["type"],
+                "[green]PASSED[/green]" if res["top1_hit"] else "[red]FAILED[/red]",
+                "[green]PASSED[/green]" if res["top3_hit"] else "[red]FAILED[/red]",
+                f"{res['func_hit_rate'] * 100:.1f}%",
+                f"{res['elapsed']:.3f}s",
             )
 
         console.print(table)

@@ -4,7 +4,7 @@ import os
 import pytest
 from mcp.server.fastmcp import FastMCP
 from repomind.mcp.server import mcp
-from repomind.mcp.tools import _get_index_dir, register_tools
+from repomind.mcp.tools import _get_index_dir
 
 def test_mcp_server_initialization():
     assert isinstance(mcp, FastMCP)

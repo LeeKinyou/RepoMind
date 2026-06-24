@@ -1,5 +1,6 @@
-"""Graph command for RepoMind CLI."""
+"""Interactive browser graph command for RepoMind CLI."""
 
+import webbrowser
 from pathlib import Path
 from typing import Any
 from dataclasses import dataclass, field
@@ -8,16 +9,16 @@ from rich.text import Text
 
 from repomind.cli.commands import registry
 from repomind.cli.components.progress import show_spinner
-from repomind.cli.components.graph import show_call_graph
+from repomind.cli.components.graph_html import write_graph_html
 
 
 @dataclass
 class GraphCommand:
-    """Call graph command."""
+    """Open a real interactive directed call graph."""
 
     name: str = "/graph"
     aliases: list[str] = field(default_factory=lambda: ["/g"])
-    description: str = "View call graph"
+    description: str = "Open interactive call graph in browser"
 
     # Dependencies
     console: Any = None
@@ -54,7 +55,7 @@ class GraphCommand:
         self._do_graph(name, depth)
 
     def _do_graph(self, name: str, depth: int = 2) -> None:
-        """Display call graph.
+        """Generate and open an interactive call graph.
 
         Args:
             name: Symbol name
@@ -78,17 +79,34 @@ class GraphCommand:
             sym.qualified_name, depth=depth
         )
 
-        show_call_graph(self.console, graph_result, sym.qualified_name, depth)
+        output_dir = self.project_path / ".repomind" / "visualizations"
+        output_path = write_graph_html(
+            graph_result,
+            sym.qualified_name,
+            depth,
+            output_dir,
+        )
+        opened = webbrowser.open(output_path.resolve().as_uri())
 
-        # Next-step suggestion
-        hint = Text()
-        hint.append("  Next: ", style="dim cyan")
-        hint.append("/show ", style="cyan")
-        hint.append(sym.name, style="white")
-        hint.append(" for details, ", style="dim")
-        hint.append("/graph ", style="cyan")
-        hint.append(f"{sym.name} -d {depth + 1}", style="white")
-        hint.append(" to expand depth", style="dim")
+        result = Text()
+        result.append("  Graph written to ", style="dim")
+        result.append(str(output_path), style="cyan")
+        result.append(
+            f"  ({len(graph_result.nodes)} nodes, {len(graph_result.edges)} edges)",
+            style="dim",
+        )
+        self.console.print(result)
+
+        if not opened:
+            self.console.print(
+                Text(
+                    "  Browser could not be opened automatically; open the file above.",
+                    style="yellow",
+                )
+            )
+
+        hint = Text("  Terminal tree: ", style="dim")
+        hint.append(f"/tree {sym.name} -d {depth}", style="cyan")
         self.console.print(hint)
         self.console.print()
 

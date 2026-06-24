@@ -176,6 +176,27 @@ def graph(
     cmd.execute(f"{name} --depth {depth}")
 
 
+@app.command()
+def tree(
+    name: str = typer.Argument(..., help="Symbol name"),
+    project: str = typer.Option(".", "--project", "-p", help="Project directory"),
+    depth: int = typer.Option(2, "--depth", "-d", help="Expansion depth"),
+):
+    """View call relationships using the legacy terminal tree."""
+    from repomind.cli.repl import RepoMindREPL
+    from repomind.cli.commands.tree import TreeCommand
+
+    proj = Path(project).resolve()
+    repl = RepoMindREPL(proj)
+
+    cmd = TreeCommand(
+        console=console,
+        project_path=proj,
+        query_service=repl.query_service,
+    )
+    cmd.execute(f"{name} --depth {depth}")
+
+
 @app.command("visualize")
 def visualize(
     name: str = typer.Argument(..., help="Symbol name"),
@@ -314,7 +335,7 @@ def diagnose(
         console.print(Text(f"  Trace file not found: {trace_file}", style="red"))
         raise typer.Exit(1)
 
-    trace = trace_path.read_text(encoding="utf-8")
+    trace = trace_path.read_text(encoding="utf-8", errors="replace")
     query = trace.strip().split("\n")[-1] if trace.strip() else ""
 
     if mode == "agent":

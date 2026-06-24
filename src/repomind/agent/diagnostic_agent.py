@@ -8,7 +8,7 @@ from repomind.agent.reasoner import Reasoner
 from repomind.agent.evidence_judge import EvidenceJudge
 from repomind.models.diagnostic import DiagnosticState, ToolInvocation
 from repomind.models.evidence import Evidence
-from repomind.services.query_service import QueryService
+from repomind.retriever.query_service import QueryService
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class DiagnosticAgent:
                     ev_id = f"search_{sym.qualified_name}"
                     new_ev = Evidence(
                         evidence_id=ev_id,
-                        source="search_code",
+                        source="search",
                         file_path=sym.file_path,
                         symbol=sym.qualified_name,
                         start_line=sym.start_line,
@@ -55,13 +55,13 @@ class DiagnosticAgent:
 
             elif name == "expand_call_chain":
                 qname = args.get("qualified_name", "")
-                res = self.query_svc.get_call_graph(qname, depth=1)
+                graph_res = self.query_svc.get_call_graph(qname, depth=1)
                 
-                for node in res.nodes:
+                for node in graph_res.nodes:
                     ev_id = f"graph_{node.qualified_name}"
                     new_ev = Evidence(
                         evidence_id=ev_id,
-                        source="expand_call_chain",
+                        source="graph",
                         file_path=node.file_path,
                         symbol=node.qualified_name,
                         start_line=node.start_line,

@@ -1,10 +1,9 @@
 """Tests for DiagnosticAgent loop."""
 
-import pytest
 from repomind.agent.diagnostic_agent import DiagnosticAgent
 from repomind.agent.reasoner import Reasoner
 from repomind.agent.evidence_judge import EvidenceJudge
-from repomind.models.diagnostic import DiagnosticState, DiagnosticHypothesis
+from repomind.models.diagnostic import DiagnosticHypothesis
 
 class MockReasoner(Reasoner):
     def __init__(self, actions):

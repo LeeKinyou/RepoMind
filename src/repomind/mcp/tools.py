@@ -1,9 +1,9 @@
 """MCP Tools registration for RepoMind."""
 import os
 from mcp.server.fastmcp import FastMCP
-from repomind.services.index_service import IndexService
-from repomind.services.query_service import QueryService
-from repomind.services.rca_service import RCAService
+from repomind.indexer.file_scanner import IndexService
+from repomind.retriever.query_service import QueryService
+from repomind.context.context_builder import RCAService
 from repomind.models.schemas import IndexOptions, QueryOptions
 from repomind.reporter.evidence_report import EvidenceReporter
 

@@ -2,7 +2,6 @@
 
 import json
 import logging
-from typing import Any
 import litellm
 
 from repomind.agent.prompts import JUDGE_SYSTEM_PROMPT
