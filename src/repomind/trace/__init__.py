@@ -1,8 +1,8 @@
 """Failure-text parsers used by deterministic diagnostics."""
 
-from repomind.trace.base import ExceptionInfo, ParsedFailure, TraceFrame, TraceParser
-from repomind.trace.pytest_failure import PytestFailureParser
-from repomind.trace.python_traceback import PythonTracebackParser
+from repomind.context.trace_parser import ExceptionInfo, ParsedFailure, TraceFrame, TraceParser
+from repomind.context.pytest_failure import PytestFailureParser
+from repomind.context.python_traceback import PythonTracebackParser
 
 __all__ = [
     "ExceptionInfo",

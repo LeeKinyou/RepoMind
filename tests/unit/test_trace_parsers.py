@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from repomind.trace.pytest_failure import PytestFailureParser
-from repomind.trace.python_traceback import PythonTracebackParser
+from repomind.context.pytest_failure import PytestFailureParser
+from repomind.context.python_traceback import PythonTracebackParser
 
 
 def test_python_traceback_parser_extracts_frames_and_final_exception():

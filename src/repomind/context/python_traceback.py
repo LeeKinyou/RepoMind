@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from repomind.trace.base import ExceptionInfo, ParsedFailure, TraceFrame
+from repomind.context.trace_parser import ExceptionInfo, ParsedFailure, TraceFrame
 
 _FRAME_PATTERN = re.compile(r'^\s*File "([^"]+)", line (\d+), in (.+)$', re.MULTILINE)
 _EXCEPTION_PATTERN = re.compile(

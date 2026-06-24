@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from repomind.trace.base import ExceptionInfo, ParsedFailure, TraceFrame
+from repomind.context.trace_parser import ExceptionInfo, ParsedFailure, TraceFrame
 
 _LOCATION_PATTERN = re.compile(
     r"^(.+?\.py):(\d+):\s*([A-Za-z_][\w.]*)\s*$", re.MULTILINE
