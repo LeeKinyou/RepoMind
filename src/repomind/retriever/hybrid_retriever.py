@@ -154,14 +154,14 @@ class HybridRetriever:
             if config.llm.embedding_model and getattr(
                 self.sqlite, "vector_available", False
             ):
-                litellm_args = {}
-                if config.llm.api_key:
-                    litellm_args["api_key"] = config.llm.api_key
-                if config.llm.base_url:
-                    litellm_args["base_url"] = config.llm.base_url
+                api_key = config.llm.api_key or None
+                api_base = config.llm.base_url or None
 
                 resp = litellm.embedding(
-                    model=config.llm.embedding_model, input=[query], **litellm_args
+                    model=config.llm.embedding_model,
+                    input=[query],
+                    api_key=api_key,
+                    api_base=api_base
                 )
                 if resp.data:
                     query_emb = resp.data[0]["embedding"]

@@ -18,7 +18,7 @@ from repomind.models.schemas import (
 )
 from repomind.storage.sqlite_store import SQLiteStore
 from repomind.storage.graph_store import GraphStore
-from repomind.core.retrieval.hybrid_retriever import HybridRetriever
+from repomind.retriever.hybrid_retriever import HybridRetriever
 
 
 class QueryService:

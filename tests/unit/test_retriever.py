@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from repomind.core.retrieval.hybrid_retriever import (
+from repomind.retriever.hybrid_retriever import (
     BM25Index,
     HybridRetriever,
     RetrievalResult,
