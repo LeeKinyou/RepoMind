@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from repomind.core.type_inference.inference_engine import (
+from repomind.indexer.inference_engine import (
     TypeInferenceEngine,
     InferredType,
 )

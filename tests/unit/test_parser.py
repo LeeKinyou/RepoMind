@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from repomind.core.parser.tree_sitter_parser import TreeSitterParser
+from repomind.indexer.ast_parser import TreeSitterParser
 
 
 @pytest.fixture
