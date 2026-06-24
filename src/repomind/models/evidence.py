@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from repomind.models.schemas import RCAResult, EvidenceItem
 
 from repomind.models.schemas import SymbolInfo, SymbolRelation
 

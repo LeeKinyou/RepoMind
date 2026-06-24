@@ -14,7 +14,7 @@ from repomind.models.schemas import (
     SymbolInfo,
     SymbolRelation,
 )
-from repomind.services.query_service import QueryService
+from repomind.retriever.query_service import QueryService
 
 RelationDirection = Literal["callers", "callees", "both"]
 

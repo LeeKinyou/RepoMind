@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from repomind.evidence.engine import EvidenceEngine
-from repomind.services.index_service import IndexService
+from repomind.indexer.file_scanner import IndexService
 
 
 @pytest.fixture

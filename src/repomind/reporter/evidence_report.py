@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from repomind.models.diagnostic import DiagnosticState
 
 from repomind.models.schemas import RCAResult
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from pathlib import Path
-from repomind.services.index_service import IndexService
+from repomind.indexer.file_scanner import IndexService
 from repomind.models.schemas import IndexOptions
 
 

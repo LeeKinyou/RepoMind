@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from repomind.services.index_service import IndexService
-from repomind.services.rca_service import RCAService
+from repomind.indexer.file_scanner import IndexService
+from repomind.context.context_builder import RCAService
 
 
 @pytest.fixture

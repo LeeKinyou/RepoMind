@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from repomind.services.index_service import IndexService
-from repomind.services.query_service import QueryService
+from repomind.indexer.file_scanner import IndexService
+from repomind.retriever.query_service import QueryService
 from repomind.models.schemas import QueryOptions
 
 
