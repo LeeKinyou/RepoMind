@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from repomind.core.call_graph.resolver import SymbolResolver
+from repomind.graph.resolver import SymbolResolver
 
 
 class TestResolveCaller:

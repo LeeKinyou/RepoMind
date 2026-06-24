@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from repomind.core.call_graph.graph_builder import CallGraphBuilder
-from repomind.core.parser.tree_sitter_parser import ParsedFile
+from repomind.graph.call_graph_builder import CallGraphBuilder
+from repomind.indexer.ast_parser import ParsedFile
 from repomind.models.schemas import SymbolInfo, SymbolType
 
 

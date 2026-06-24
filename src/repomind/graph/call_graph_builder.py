@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from repomind.core.parser.tree_sitter_parser import ImportInfo, ParsedFile
+from repomind.indexer.ast_parser import ImportInfo, ParsedFile
 from repomind.storage.graph_store import GraphStore
 from repomind.models.schemas import SymbolRelation, RelationType
-from repomind.core.call_graph.resolver import SymbolResolver
+from repomind.graph.resolver import SymbolResolver
 from repomind.utils.path_utils import path_to_module
 
 
