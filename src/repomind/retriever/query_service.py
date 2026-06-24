@@ -75,6 +75,19 @@ class QueryService:
             logger.error("Search failed for query '%s': %s", query, e)
             raise QueryError(f"Search failed: {e}") from e
 
+        # Extract active traceback lines if the query is a traceback
+        from repomind.context.traceback_parser import TracebackQueryParser
+        from repomind.context.skeletonizer import CodeSkeletonizer
+        tb_parser = TracebackQueryParser()
+        parsed_tb = tb_parser.parse_query(query)
+
+        active_lines_by_file: dict[str, set[int]] = {}
+        if parsed_tb["is_traceback"]:
+            for frame in parsed_tb["frames"]:
+                # Normalise frame file_path to lower case relative path or basename
+                fpath = frame["file_path"].replace("\\", "/").lower()
+                active_lines_by_file.setdefault(fpath, set()).add(frame["line_number"])
+
         symbols = []
         sources = []
         project_root = Path(self.sqlite.db_path).parent.parent
@@ -89,12 +102,27 @@ class QueryService:
                     if not p.is_absolute():
                         p = project_root / p
                     if p.exists():
-                        lines = p.read_text(
-                            encoding="utf-8", errors="replace"
-                        ).splitlines()
-                        start_idx = max(0, sym_info.start_line - 1)
-                        end_idx = min(len(lines), sym_info.end_line)
-                        sym_info.snippet = "\n".join(lines[start_idx:end_idx])
+                        # Match this symbol's file path against traceback parsed files
+                        sym_file_key = Path(sym_info.file_path).as_posix().lower()
+                        active_lines = None
+                        for tb_file, lines_set in active_lines_by_file.items():
+                            if tb_file in sym_file_key or sym_file_key in tb_file or Path(tb_file).name == Path(sym_file_key).name:
+                                active_lines = lines_set
+                                break
+                        
+                        if active_lines is not None:
+                            # Load full file, skeletonize, and annotate active lines
+                            source_code = p.read_text(encoding="utf-8", errors="replace")
+                            skeletonizer = CodeSkeletonizer()
+                            sym_info.snippet = skeletonizer.skeletonize(source_code, active_lines)
+                        else:
+                            # Default sliding window snippet
+                            lines = p.read_text(
+                                encoding="utf-8", errors="replace"
+                            ).splitlines()
+                            start_idx = max(0, sym_info.start_line - 1)
+                            end_idx = min(len(lines), sym_info.end_line)
+                            sym_info.snippet = "\n".join(lines[start_idx:end_idx])
                 except Exception:
                     pass
 
