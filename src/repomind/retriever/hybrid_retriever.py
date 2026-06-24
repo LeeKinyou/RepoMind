@@ -117,6 +117,89 @@ class HybridRetriever:
         if not self._built:
             self.build_index()
 
+        from repomind.context.traceback_parser import TracebackQueryParser
+        from pathlib import Path
+        project_root = ""
+        if hasattr(self.sqlite, "db_path") and self.sqlite.db_path:
+            project_root = str(Path(self.sqlite.db_path).parent.parent)
+        tb_parser = TracebackQueryParser(project_root=project_root)
+        parsed_tb = tb_parser.parse_query(query)
+
+        tb_results = []
+        expanded_seen = set()
+
+        if parsed_tb["is_traceback"]:
+            for frame in parsed_tb["frames"]:
+                frame_file = frame["file_path"].replace("\\", "/")
+                func_name = frame["function_name"]
+
+                # 1. Direct Match: Fetch symbol metadata
+                with self.sqlite._read_connect() as conn:
+                    rows = conn.execute(
+                        """SELECT s.*, f.path AS file_path 
+                           FROM symbols s
+                           JOIN files f ON s.file_id = f.id
+                           WHERE s.name = ? AND (f.path = ? OR f.path LIKE ?)""",
+                        (func_name, frame_file, f"%{frame_file}"),
+                    ).fetchall()
+                    matches = [dict(r) for r in rows]
+
+                for sym in matches:
+                    qname = sym["qualified_name"]
+                    if qname not in expanded_seen:
+                        expanded_seen.add(qname)
+                        tb_results.append(
+                            RetrievalResult(
+                                symbol=sym,
+                                score=1.2,  # Direct match has highest score
+                                source="trace_direct",
+                                matched_text=f"trace-direct: {qname}",
+                            )
+                        )
+
+                    # 2. Call Graph Neighbours (BFS up to 2 hops)
+                    hops = self.graph.bfs_expand(qname, hops=2)
+                    for neighbor in hops:
+                        if neighbor not in expanded_seen:
+                            expanded_seen.add(neighbor)
+                            nsym = self.sqlite.get_symbol_by_qualified_name(neighbor)
+                            if nsym:
+                                tb_results.append(
+                                    RetrievalResult(
+                                        symbol=nsym,
+                                        score=0.9,
+                                        source="trace_graph",
+                                        matched_text=f"trace-graph-expanded from {qname}: {neighbor}",
+                                    )
+                                )
+
+                    # 3. Import Mapping
+                    file_path = sym["file_path"]
+                    file_imports = self.sqlite.get_imports_for_file(file_path)
+                    for imp in file_imports:
+                        module = imp["module_path"]
+                        with self.sqlite._read_connect() as conn:
+                            rows = conn.execute(
+                                """SELECT s.*, f.path AS file_path 
+                                   FROM symbols s
+                                   JOIN files f ON s.file_id = f.id
+                                   WHERE f.path LIKE ?""",
+                                (f"%{module}.py",),
+                            ).fetchall()
+                            imported_symbols = [dict(r) for r in rows]
+                        for isym in imported_symbols:
+                            iqname = isym["qualified_name"]
+                            if iqname not in expanded_seen:
+                                expanded_seen.add(iqname)
+                                tb_results.append(
+                                    RetrievalResult(
+                                        symbol=isym,
+                                        score=0.8,
+                                        source="trace_import",
+                                        matched_text=f"trace-import from {file_path}: {iqname}",
+                                    )
+                                )
+
         # BM25 results
         bm25_hits = self.bm25.search(query, top_k=top_k * 2)
         bm25_results = []
@@ -139,7 +222,7 @@ class HybridRetriever:
                 RetrievalResult(
                     symbol=doc,
                     score=1.0,
-                    source="keyword",
+                     source="keyword",
                     matched_text=f"{doc.get('name', '')} ({doc.get('type', '')})",
                 )
             )
@@ -208,7 +291,7 @@ class HybridRetriever:
                             )
 
         # RRF Fusion
-        all_results = bm25_results + sql_results + vector_results + graph_results
+        all_results = tb_results + bm25_results + sql_results + vector_results + graph_results
         return self._rrf_fuse(all_results, top_k)
 
     def _rrf_fuse(

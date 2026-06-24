@@ -549,6 +549,18 @@ class SQLiteStore:
             ).fetchall()
             return [dict(r) for r in rows]
 
+    def get_imports_for_file(self, file_path: str) -> list[dict]:
+        """Get all imports declared in the specified file."""
+        with self._read_read_connect() if hasattr(self, '_read_read_connect') else self._read_connect() as conn:
+            rows = conn.execute(
+                """SELECT i.* 
+                   FROM imports i
+                   JOIN files f ON i.file_id = f.id
+                   WHERE f.path = ? OR f.path LIKE ?""",
+                (file_path, f"%{file_path}"),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
     def clear(self) -> None:
         with self._connect() as conn:
             for table in self._CLEARABLE_TABLES:

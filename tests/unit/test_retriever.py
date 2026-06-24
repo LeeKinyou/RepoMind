@@ -110,3 +110,52 @@ class TestVectorDegradation:
         retriever = HybridRetriever(StoreWithoutVectors(), GraphStore())
 
         assert retriever.degraded_features == ["vector_search"]
+
+
+def test_traceback_graph_expansion(tmp_path):
+    from repomind.storage.sqlite_store import SQLiteStore
+    from repomind.storage.graph_store import GraphStore
+    from repomind.retriever.hybrid_retriever import HybridRetriever
+    from repomind.models.schemas import FileInfo, SymbolInfo
+    
+    db_path = tmp_path / "test.db"
+    store = SQLiteStore(str(db_path))
+    graph = GraphStore()
+    
+    # Setup schema records
+    fid = store.upsert_file(FileInfo(path="auth.py", hash="h1", language="python", line_count=20, size_bytes=100))
+    sid = store.insert_symbol(SymbolInfo(name="login", qualified_name="auth.login", type="function", file_path="auth.py", start_line=5, end_line=15), fid)
+    
+    fid2 = store.upsert_file(FileInfo(path="db.py", hash="h2", language="python", line_count=20, size_bytes=100))
+    sid2 = store.insert_symbol(SymbolInfo(name="query", qualified_name="db.query", type="function", file_path="db.py", start_line=5, end_line=15), fid2)
+    
+    # Setup import record from auth.py to db.py
+    store.insert_import(fid, module_path="db", imported_name="query")
+    
+    # Setup call graph calls
+    store.insert_call(caller_qname="auth.login", callee_qname="db.query", call_type="call")
+    from repomind.models.schemas import SymbolRelation, RelationType
+    graph.add_symbol("auth.login", type="function")
+    graph.add_symbol("db.query", type="function")
+    graph.add_relation(SymbolRelation(source="auth.login", target="db.query", relation_type=RelationType.CALLS))
+    
+    retriever = HybridRetriever(store, graph)
+    
+    # Query containing a traceback on auth.login
+    query = """
+    Traceback (most recent call last):
+      File "auth.py", line 10, in login
+        db.query("sql")
+    AttributeError: missing db
+    """
+    
+    res = retriever.retrieve(query, top_k=5)
+    # Should resolve auth.login directly, expand to caller/callee db.query, and import mapping
+    qnames = [r.symbol["qualified_name"] for r in res]
+    assert "auth.login" in qnames
+    assert "db.query" in qnames
+    
+    # Assert that the new structured traceback sources are present in the fused sources
+    sources = [r.source for r in res]
+    assert any("trace_direct" in s for s in sources)
+    assert any("trace_import" in s or "trace_graph" in s for s in sources)
