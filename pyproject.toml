@@ -16,6 +16,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "prompt_toolkit>=3.0.0",
     "mcp>=1.28,<2",
+    "langgraph>=1.2.6",
+    "langchain-core>=1.4.8",
 ]
 
 [project.optional-dependencies]

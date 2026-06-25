@@ -280,11 +280,15 @@ def eval(
     benchmark: str = typer.Option(
         None, "--benchmark", "-b", help="Path to benchmark JSON file"
     ),
+    sandbox: str = typer.Option(
+        "auto", "--sandbox", help="Sandbox mode: 'auto', 'docker', or 'subprocess'"
+    ),
 ):
     """Run the evaluation suite on the benchmark cases."""
     from repomind.eval.evaluator import RepoMindEvaluator
 
     proj = Path(project).resolve()
+    os.environ["REPOMIND_SANDBOX_MODE"] = sandbox
 
     if benchmark is None:
         import repomind.eval

@@ -1,0 +1,26 @@
+{
+  "keyword_only": {
+    "top1_rate": 0.7,
+    "top3_rate": 0.96,
+    "func_rate": 0.8833333333333333,
+    "latency": 0.009738001823425293
+  },
+  "symbol_only": {
+    "top1_rate": 0.8,
+    "top3_rate": 0.96,
+    "func_rate": 0.98,
+    "latency": 0.03594734191894531
+  },
+  "hybrid": {
+    "top1_rate": 0.64,
+    "top3_rate": 0.9,
+    "func_rate": 0.92,
+    "latency": 0.14416106700897216
+  },
+  "full": {
+    "top1_rate": 0.92,
+    "top3_rate": 0.98,
+    "func_rate": 0.96,
+    "latency": 0.03619501113891602
+  }
+}

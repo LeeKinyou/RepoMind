@@ -70,6 +70,7 @@ class QueryService:
                 query,
                 top_k=options.max_results,
                 expand_hops=options.graph_hops,
+                mode=options.mode,
             )
         except Exception as e:
             logger.error("Search failed for query '%s': %s", query, e)
@@ -94,6 +95,17 @@ class QueryService:
 
         for r in results:
             sym_info = self._dict_to_symbol_info(r.symbol)
+            if getattr(r, "matched_symbols", None):
+                sym_info.matched_symbols = [
+                    {
+                        "name": ms.symbol_name,
+                        "qualified_name": ms.qualified_name,
+                        "file_path": ms.file_path,
+                        "start_line": ms.start_line,
+                        "end_line": ms.end_line,
+                    }
+                    for ms in r.matched_symbols
+                ]
 
             # Load code snippet if include_code option is enabled
             if options.include_code:
@@ -135,7 +147,7 @@ class QueryService:
         return QueryResult(
             answer=answer,
             symbols=symbols,
-            confidence=max((r.score for r in results), default=0.0),
+            confidence=min(1.0, max(0.0, max((r.score if r.score <= 1.0 else min(0.99, r.score / 200.0) for r in results), default=0.0))),
             sources=list(set(sources)),
             elapsed_seconds=round(elapsed, 3),
         )

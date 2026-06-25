@@ -58,6 +58,7 @@ class SymbolInfo(BaseModel):
     is_exported: bool = True
     parent_class: str | None = None
     snippet: str | None = None
+    matched_symbols: list[dict] | None = None
 
 
 class SymbolRelation(BaseModel):
@@ -121,6 +122,7 @@ class QueryOptions(BaseModel):
     include_docs: bool = True
     expand_graph: bool = True
     graph_hops: int = 2
+    mode: str = "full"
 
 
 class QueryResult(BaseModel):

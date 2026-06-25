@@ -42,20 +42,39 @@ class TestSandboxExecutorSubprocess:
 
 
 class TestSandboxExecutorDockerFallback:
-    def test_docker_fallback_when_docker_missing(self, monkeypatch):
+    def test_docker_mode_fails_fast_when_docker_missing(self, monkeypatch):
+        # Force docker command to fail
+        import subprocess
+
+        original_run = subprocess.run
+
+        def mock_run(cmd, *args, **kwargs):
+            if cmd[0] == "docker":
+                raise FileNotFoundError("docker command not found")
+            return original_run(cmd, *args, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", mock_run)
+
+        import pytest
+        with pytest.raises(RuntimeError) as exc_info:
+            SandboxExecutor(mode="docker", timeout=5)
+        assert "Docker sandbox requested, but Docker daemon is not available" in str(exc_info.value)
+
+    def test_auto_mode_falls_back_when_docker_missing(self, monkeypatch):
         # Force docker command to fail to trigger fallback
         import subprocess
 
         original_run = subprocess.run
 
         def mock_run(cmd, *args, **kwargs):
-            if cmd[0] == "docker" and cmd[1] == "--version":
+            if cmd[0] == "docker":
                 raise FileNotFoundError("docker command not found")
             return original_run(cmd, *args, **kwargs)
 
         monkeypatch.setattr(subprocess, "run", mock_run)
 
-        executor = SandboxExecutor(mode="docker", timeout=5)
+        executor = SandboxExecutor(mode="auto", timeout=5)
+        assert executor.resolved_mode == "subprocess"
         code = "print('docker fallback works')"
         result = executor.run_python_code(code)
         assert result.success is True

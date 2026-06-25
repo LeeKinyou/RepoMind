@@ -83,6 +83,10 @@ class IndexService:
 
         # 3. Parse files
         parsed_files, skipped = self._parse_files(py_files, project_path, errors)
+        try:
+            self.sqlite.set_stat("parse_errors", skipped)
+        except Exception:
+            pass
 
         # 4. Store files and symbols (includes type inference and idempotency check)
         total_symbols, total_classes, total_functions, symbols_to_embed = (
@@ -129,9 +133,18 @@ class IndexService:
     ) -> tuple[list[ParsedFile], int]:
         parsed_files = []
         skipped = 0
+        from repomind.indexer.ast_symbol_indexer import ASTSymbolIndexer
+        ast_indexer = ASTSymbolIndexer()
         for fp in py_files:
             try:
                 pf = self.parser.parse_file(str(fp), project_root=str(project_path))
+                try:
+                    source_code = fp.read_text(encoding="utf-8", errors="replace")
+                    ast_symbols = ast_indexer.extract_symbols(source_code, str(fp), project_root=str(project_path))
+                    if ast_symbols:
+                        pf.symbols = ast_symbols
+                except Exception as ae:
+                    errors.append(f"AST extraction failed for {fp}: {ae}")
                 parsed_files.append(pf)
             except Exception as e:
                 errors.append(f"Failed to parse {fp}: {e}")
@@ -367,6 +380,9 @@ class IndexService:
                 ".mypy_cache",
                 ".pytest_cache",
                 ".ruff_cache",
+                ".uv-cache",
+                ".gemini",
+                ".worktrees",
             }:
                 continue
             try:

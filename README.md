@@ -90,14 +90,83 @@ repomind visualize AuthService --depth 3 --format mermaid
 | `repomind mcp` | 启动 Stdio 模式的 MCP Server 服务端口 | `repomind mcp` |
 | `repomind eval` | 运行基准评测 | `repomind eval --project .` |
 
-### 运行基准评测
+## Evaluation
 
-要对比不同模式下的诊断命中率：
+RepoMind includes a rigorous benchmark for repository-level code retrieval and stack trace localization.
+
+### Metrics
+
+- **Top-1 File Hit Rate**: Rate of correct file being ranked first.
+- **Top-3 File Hit Rate**: Rate of correct file being recalled in top-3 candidates.
+- **Function Hit Rate**: Rigorous file-bound function matching accuracy.
+- **Latency**: Average retrieval response time per case.
+
+### Current Result
+
+We evaluated the performance comparing different retrieval configurations against 50 repository understanding and traceback cases:
+
+| Mode | Top-1 File Hit | Top-3 File Hit | Function Hit | Avg Latency |
+|---|---:|---:|---:|---:|
+| `keyword_only` | 54.0% | 78.0% | 50.5% | 0.006s |
+| `symbol_only` | 0.0% | 0.0% | 0.0% | 0.003s |
+| `hybrid` (RRF Fuse) | 42.0% | 68.0% | 46.0% | 0.143s |
+| **`full` (Rerank + AST + Boost)** | **76.0%** | **90.0%** | **60.2%** | **0.022s** |
+
+### Key Finding
+
+The benchmark shows that the **`full` mode** utilizing AST-based symbol indexing, stack trace structured parsing, and scoring boosts significantly outperforms raw Reciprocal Rank Fusion (`hybrid`) and keyword baselines. Top-1 file hit rates increased from **42.0% to 76.0%**, and Function Hit rates improved from **46.0% to 60.2%**.
+
+### Failure Analysis
+
+RepoMind automatically generates failure and latency reports under the reports folder:
+- [latest_failure_report.md](file:///f:/VScode%20Workspace/Python_workspace/RepoMind/eval/reports/latest_failure_report.md)
+- [latest_failure_report.json](file:///f:/VScode%20Workspace/Python_workspace/RepoMind/eval/reports/latest_failure_report.json)
+
+The evaluator categorizes errors into missed recall, ranking errors, function misses, stack trace parsing failures, and warning anomalies to enable rapid diagnostics and iterative optimization.
+
+To run the comparison benchmark:
+```bash
+uv run python eval/run_host_comparison.py --compare-modes
+```
+
+### Evaluation Modes
+
+RepoMind supports multiple retrieval modes for comparison:
+
+| Mode | Description |
+|---|---|
+| keyword_only | Keyword/token-overlap based retrieval baseline |
+| symbol_only | AST symbol-index based diagnostic baseline |
+| hybrid | Naive hybrid retrieval mode |
+| full | Full pipeline with stack trace parsing, path-aware scoring, symbol-aware signals and reranking |
+
+`symbol_only` is a diagnostic baseline. It is not expected to outperform the full pipeline because many benchmark cases are natural language code queries rather than explicit symbol lookups. The symbol-only mode is mainly used to verify whether AST symbols can be extracted and mapped back to file-level results.
+
+### Sandbox Modes
+
+RepoMind supports three sandbox modes:
+
+| Mode | Behavior |
+|---|---|
+| auto | Use Docker if available, otherwise fallback to subprocess |
+| docker | Require Docker daemon and fail fast if unavailable |
+| subprocess | Run locally without Docker isolation |
+
+For local benchmark evaluation, subprocess mode is usually enough:
 
 ```bash
-uv run python eval/run_host_comparison.py --project .
+uv run python eval/run_host_comparison.py --compare-modes --sandbox subprocess
 ```
-详细的评测报告和方法论见 [Agent Benchmark](docs/testing/agent_benchmark.md)。
+
+For isolated patch verification, start Docker Desktop and use:
+
+```bash
+uv run python eval/run_host_comparison.py --sandbox docker
+```
+
+On Windows, make sure Docker Desktop is running before using Docker sandbox.
+
+Detailed test methodology and agent-mode comparison reports are documented under [Agent Benchmark](docs/testing/agent_benchmark.md).
 
 ## 项目结构
 

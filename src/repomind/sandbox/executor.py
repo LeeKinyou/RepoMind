@@ -24,12 +24,47 @@ class SandboxResult(BaseModel):
     error_message: str | None = None
 
 
+def is_docker_available() -> bool:
+    """Check if Docker daemon is available and responsive."""
+    try:
+        res = subprocess.run(
+            ["docker", "info"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        )
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
 class SandboxExecutor:
     """Safely executes code or commands within a sandboxed environment (Docker or Subprocess)."""
 
-    def __init__(self, mode: str = "docker", timeout: int = 60):
+    def __init__(self, mode: str = "auto", timeout: int = 60):
         self.mode = mode
         self.timeout = timeout
+        
+        if mode == "docker":
+            if not is_docker_available():
+                raise RuntimeError(
+                    "Docker sandbox requested, but Docker daemon is not available. "
+                    "Please start Docker Desktop or use --sandbox subprocess."
+                )
+            self.resolved_mode = "docker"
+        elif mode == "subprocess":
+            self.resolved_mode = "subprocess"
+        elif mode == "auto":
+            if is_docker_available():
+                self.resolved_mode = "docker"
+            else:
+                logger.warning(
+                    "Docker daemon is not available. Falling back to subprocess sandbox. "
+                    "Use --sandbox subprocess to silence this warning, or start Docker Desktop."
+                )
+                self.resolved_mode = "subprocess"
+        else:
+            raise ValueError(f"Unknown sandbox mode: {mode}")
 
     def run_python_code(self, code_str: str) -> SandboxResult:
         """Write Python code to a temp file and execute it in the sandbox."""
@@ -37,14 +72,14 @@ class SandboxExecutor:
             file_path = Path(tmp_dir) / "run.py"
             file_path.write_text(code_str, encoding="utf-8")
 
-            if self.mode == "docker":
+            if self.resolved_mode == "docker":
                 return self._run_docker("python /sandbox/run.py", mount_path=tmp_dir)
             else:
                 return self._run_subprocess(["python", str(file_path)])
 
     def run_command(self, cmd: list[str], cwd: str | None = None) -> SandboxResult:
         """Run a command directly in the sandbox."""
-        if self.mode == "docker":
+        if self.resolved_mode == "docker":
             workspace = cwd or os.getcwd()
             return self._run_docker(" ".join(cmd), mount_path=workspace)
         else:
@@ -104,6 +139,13 @@ class SandboxExecutor:
         try:
             subprocess.run(["docker", "--version"], capture_output=True, check=True)
         except (subprocess.SubprocessError, FileNotFoundError):
+            if self.mode == "docker":
+                return SandboxResult(
+                    success=False,
+                    exit_code=-3,
+                    elapsed_seconds=0.0,
+                    error_message="Docker daemon became unavailable during execution.",
+                )
             logger.warning(
                 "Docker daemon is not available. Falling back to subprocess sandbox."
             )

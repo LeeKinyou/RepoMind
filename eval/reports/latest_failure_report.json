@@ -1,0 +1,41 @@
+{
+  "summary": {
+    "total_cases": 1,
+    "top1_file_hit_rate": 1.0,
+    "top3_file_hit_rate": 1.0,
+    "function_hit_rate": 1.0,
+    "avg_latency": 0.0002,
+    "generated_at": "2026-06-25T21:13:44.449228"
+  },
+  "failure_categories": {
+    "missed_recall": 0,
+    "ranking_error": 0,
+    "function_miss": 0,
+    "evaluator_warning": 0,
+    "stacktrace_parse_miss": 0,
+    "other": 1
+  },
+  "cases": [
+    {
+      "case_id": "case_test",
+      "type": "Code Query",
+      "query": "Where is the divide function?",
+      "expected_file": "src/repomind/utils/math_utils.py",
+      "expected_functions": [
+        "divide"
+      ],
+      "actual_top_files": [
+        "src/repomind/utils/math_utils.py"
+      ],
+      "actual_functions": [
+        "divide"
+      ],
+      "top1_hit": true,
+      "top3_hit": true,
+      "function_hit_rate": 1.0,
+      "latency": 0.0002,
+      "failure_category": "other",
+      "suggested_fix": "Investigate database structure or matching index"
+    }
+  ]
+}

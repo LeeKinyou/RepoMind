@@ -131,12 +131,41 @@ class RCAService:
             summary = f"{exc.type}: {exc.message}"
             error_type = exc.type
 
+        # Collect active line numbers for each file in the traceback
+        active_lines_by_file: dict[str, set[int]] = {}
+        for frame in parsed.frames:
+            norm_p = self._normalize_path(frame.file_path)
+            active_lines_by_file.setdefault(norm_p, set()).add(frame.line_number)
+
         evidences = []
         affected_symbols = []
 
         for idx, frame in enumerate(parsed.frames):
             norm_path = self._normalize_path(frame.file_path)
-            snippet = self._get_code_snippet(norm_path, frame.line_number)
+            
+            snippet = None
+            if norm_path in active_lines_by_file:
+                try:
+                    p = Path(norm_path)
+                    if not p.is_absolute():
+                        p = self.project_root / p
+                    if p.exists():
+                        source_code = p.read_text(encoding="utf-8", errors="replace")
+                        from repomind.context.skeletonizer import CodeSkeletonizer
+                        skeletonizer = CodeSkeletonizer()
+                        raw_skeleton = skeletonizer.skeletonize(source_code, active_lines_by_file[norm_path])
+                        
+                        # Add dynamic target line marker (e.g. => line_number) to the skeletonized code
+                        lines = raw_skeleton.splitlines()
+                        for ln in active_lines_by_file[norm_path]:
+                            if 0 < ln <= len(lines):
+                                lines[ln - 1] = "=> " + lines[ln - 1]
+                        snippet = "\n".join(lines)
+                except Exception as e:
+                    logger.warning("Skeletonization failed for %s: %s", norm_path, e)
+
+            if snippet is None:
+                snippet = self._get_code_snippet(norm_path, frame.line_number)
             
             qname = self._frame_to_qname(norm_path, frame.function_name)
             sym = self.sqlite.get_symbol_by_qualified_name(qname)

@@ -2,9 +2,9 @@
   {
     "case_id": "case_001",
     "type": "Code Query",
-    "query": "How is Python source code parsed using Tree-sitter?",
+    "query": "How is Python source code parsed using Tree-sitter in RepoMind?",
     "expected_files": [
-      "src/repomind/core/parser/tree_sitter_parser.py"
+      "src/repomind/indexer/ast_parser.py"
     ],
     "expected_functions": [
       "parse_file",
@@ -13,21 +13,90 @@
   },
   {
     "case_id": "case_002",
-    "type": "Code Query",
-    "query": "How are call graph dependencies built?",
+    "type": "Stack Trace",
+    "query": "FileNotFoundError: [Errno 2] No such file or directory in ast_parser.py at line 45 in parse_file",
     "expected_files": [
-      "src/repomind/core/call_graph/graph_builder.py"
+      "src/repomind/indexer/ast_parser.py"
+    ],
+    "expected_functions": [
+      "parse_file"
+    ]
+  },
+  {
+    "case_id": "case_003",
+    "type": "Code Query",
+    "query": "Where do we extract class and function nodes from tree-sitter AST trees?",
+    "expected_files": [
+      "src/repomind/indexer/ast_parser.py"
+    ],
+    "expected_functions": [
+      "_extract_symbols",
+      "parse_source"
+    ]
+  },
+  {
+    "case_id": "case_004",
+    "type": "Stack Trace",
+    "query": "AttributeError: 'NoneType' object has no attribute 'root_node' in ast_parser.py",
+    "expected_files": [
+      "src/repomind/indexer/ast_parser.py"
+    ],
+    "expected_functions": [
+      "parse_source"
+    ]
+  },
+  {
+    "case_id": "case_005",
+    "type": "Code Query",
+    "query": "How are call graph dependencies built across files?",
+    "expected_files": [
+      "src/repomind/graph/call_graph_builder.py"
     ],
     "expected_functions": [
       "build"
     ]
   },
   {
-    "case_id": "case_003",
+    "case_id": "case_006",
+    "type": "Stack Trace",
+    "query": "NetworkXError: Node repomind.utils not found in graph in call_graph_builder.py at line 78 in build",
+    "expected_files": [
+      "src/repomind/graph/call_graph_builder.py"
+    ],
+    "expected_functions": [
+      "build"
+    ]
+  },
+  {
+    "case_id": "case_007",
+    "type": "Code Query",
+    "query": "Where do we resolve caller and callee function relations static analysis?",
+    "expected_files": [
+      "src/repomind/graph/call_graph_builder.py"
+    ],
+    "expected_functions": [
+      "_resolve_callees",
+      "build"
+    ]
+  },
+  {
+    "case_id": "case_008",
+    "type": "Stack Trace",
+    "query": "KeyError: 'caller_qname' in call_graph_builder.py during relation building",
+    "expected_files": [
+      "src/repomind/graph/call_graph_builder.py"
+    ],
+    "expected_functions": [
+      "build",
+      "_resolve_callees"
+    ]
+  },
+  {
+    "case_id": "case_009",
     "type": "Code Query",
     "query": "Where is progressive type inference performed?",
     "expected_files": [
-      "src/repomind/core/type_inference/inference_engine.py"
+      "src/repomind/indexer/inference_engine.py"
     ],
     "expected_functions": [
       "infer",
@@ -35,11 +104,45 @@
     ]
   },
   {
-    "case_id": "case_004",
+    "case_id": "case_010",
+    "type": "Stack Trace",
+    "query": "TypeError: unsupported operand type(s) for +: 'NoneType' and 'str' in inference_engine.py inside infer_symbol",
+    "expected_files": [
+      "src/repomind/indexer/inference_engine.py"
+    ],
+    "expected_functions": [
+      "infer_symbol"
+    ]
+  },
+  {
+    "case_id": "case_011",
+    "type": "Code Query",
+    "query": "How does the inference engine handle composite types like dict[str, int]?",
+    "expected_files": [
+      "src/repomind/indexer/inference_engine.py"
+    ],
+    "expected_functions": [
+      "_parse_type_annotation",
+      "infer_symbol"
+    ]
+  },
+  {
+    "case_id": "case_012",
+    "type": "Stack Trace",
+    "query": "ValueError: Invalid type annotation signature in inference_engine.py",
+    "expected_files": [
+      "src/repomind/indexer/inference_engine.py"
+    ],
+    "expected_functions": [
+      "_parse_type_annotation"
+    ]
+  },
+  {
+    "case_id": "case_013",
     "type": "Stack Trace",
     "query": "AttributeError: 'NoneType' object has no attribute 'get_symbol_by_qualified_name' in query_service.py",
     "expected_files": [
-      "src/repomind/services/query_service.py"
+      "src/repomind/retriever/query_service.py"
     ],
     "expected_functions": [
       "search",
@@ -47,15 +150,430 @@
     ]
   },
   {
-    "case_id": "case_005",
+    "case_id": "case_014",
+    "type": "Code Query",
+    "query": "How does QueryService retrieve call graph nodes and paths?",
+    "expected_files": [
+      "src/repomind/retriever/query_service.py"
+    ],
+    "expected_functions": [
+      "get_call_graph",
+      "search"
+    ]
+  },
+  {
+    "case_id": "case_015",
+    "type": "Stack Trace",
+    "query": "sqlite3.OperationalError: no such column: s.file_path in query_service.py",
+    "expected_files": [
+      "src/repomind/retriever/query_service.py"
+    ],
+    "expected_functions": [
+      "search",
+      "get_symbol_info"
+    ]
+  },
+  {
+    "case_id": "case_016",
+    "type": "Code Query",
+    "query": "Where does QueryService initialize SQLiteStore and GraphStore?",
+    "expected_files": [
+      "src/repomind/retriever/query_service.py"
+    ],
+    "expected_functions": [
+      "__init__"
+    ]
+  },
+  {
+    "case_id": "case_017",
     "type": "Code Query",
     "query": "How does HybridRetriever combine BM25 and graph expansion?",
     "expected_files": [
-      "src/repomind/core/retrieval/hybrid_retriever.py"
+      "src/repomind/retriever/hybrid_retriever.py"
     ],
     "expected_functions": [
       "retrieve",
       "_rrf_fuse"
+    ]
+  },
+  {
+    "case_id": "case_018",
+    "type": "Stack Trace",
+    "query": "ZeroDivisionError: division by zero in hybrid_retriever.py during RRF fusion",
+    "expected_files": [
+      "src/repomind/retriever/hybrid_retriever.py"
+    ],
+    "expected_functions": [
+      "_rrf_fuse"
+    ]
+  },
+  {
+    "case_id": "case_019",
+    "type": "Code Query",
+    "query": "Where is the BM25 Index constructed in memory in HybridRetriever?",
+    "expected_files": [
+      "src/repomind/retriever/hybrid_retriever.py"
+    ],
+    "expected_functions": [
+      "build_index",
+      "retrieve"
+    ]
+  },
+  {
+    "case_id": "case_020",
+    "type": "Stack Trace",
+    "query": "ValueError: Empty BM25 index docs list in hybrid_retriever.py",
+    "expected_files": [
+      "src/repomind/retriever/hybrid_retriever.py"
+    ],
+    "expected_functions": [
+      "build_index"
+    ]
+  },
+  {
+    "case_id": "case_021",
+    "type": "Code Query",
+    "query": "How does the skeletonizer compress code and fold bodies?",
+    "expected_files": [
+      "src/repomind/context/skeletonizer.py"
+    ],
+    "expected_functions": [
+      "skeletonize",
+      "fold_code"
+    ]
+  },
+  {
+    "case_id": "case_022",
+    "type": "Stack Trace",
+    "query": "IndexError: string index out of range in skeletonizer.py at fold_code",
+    "expected_files": [
+      "src/repomind/context/skeletonizer.py"
+    ],
+    "expected_functions": [
+      "fold_code"
+    ]
+  },
+  {
+    "case_id": "case_023",
+    "type": "Code Query",
+    "query": "Where is the AST code skeletonizing algorithm defined?",
+    "expected_files": [
+      "src/repomind/context/skeletonizer.py"
+    ],
+    "expected_functions": [
+      "skeletonize"
+    ]
+  },
+  {
+    "case_id": "case_024",
+    "type": "Stack Trace",
+    "query": "UnicodeDecodeError: 'utf-8' codec can't decode byte in skeletonizer.py",
+    "expected_files": [
+      "src/repomind/context/skeletonizer.py"
+    ],
+    "expected_functions": [
+      "skeletonize"
+    ]
+  },
+  {
+    "case_id": "case_025",
+    "type": "Code Query",
+    "query": "How is the DiagnosticAgent LangGraph state graph compiled and created?",
+    "expected_files": [
+      "src/repomind/agent/state_graph.py"
+    ],
+    "expected_functions": [
+      "create_agent_graph"
+    ]
+  },
+  {
+    "case_id": "case_026",
+    "type": "Stack Trace",
+    "query": "KeyError: 'hypotheses' in state_graph.py inside planner_node",
+    "expected_files": [
+      "src/repomind/agent/state_graph.py"
+    ],
+    "expected_functions": [
+      "planner_node"
+    ]
+  },
+  {
+    "case_id": "case_027",
+    "type": "Code Query",
+    "query": "Where are the node functions (planner, executor, verifier, judge) defined in Agent orchestrator?",
+    "expected_files": [
+      "src/repomind/agent/state_graph.py"
+    ],
+    "expected_functions": [
+      "planner_node",
+      "executor_node",
+      "verifier_node",
+      "judge_node"
+    ]
+  },
+  {
+    "case_id": "case_028",
+    "type": "Stack Trace",
+    "query": "JSONDecodeError: Expecting value: line 1 column 1 (char 0) in state_graph.py at judge_node",
+    "expected_files": [
+      "src/repomind/agent/state_graph.py"
+    ],
+    "expected_functions": [
+      "judge_node"
+    ]
+  },
+  {
+    "case_id": "case_029",
+    "type": "Code Query",
+    "query": "Where is the stopping condition check logic for DiagnosticAgent iterations?",
+    "expected_files": [
+      "src/repomind/agent/state_graph.py"
+    ],
+    "expected_functions": [
+      "check_stopping_condition"
+    ]
+  },
+  {
+    "case_id": "case_030",
+    "type": "Code Query",
+    "query": "How does DiagnosticAgent instantiate LangGraph workflow run?",
+    "expected_files": [
+      "src/repomind/agent/diagnostic_agent.py"
+    ],
+    "expected_functions": [
+      "run",
+      "__init__"
+    ]
+  },
+  {
+    "case_id": "case_031",
+    "type": "Stack Trace",
+    "query": "litellm.exceptions.APIConnectionError: Connection error in diagnostic_agent.py",
+    "expected_files": [
+      "src/repomind/agent/diagnostic_agent.py"
+    ],
+    "expected_functions": [
+      "run"
+    ]
+  },
+  {
+    "case_id": "case_032",
+    "type": "Code Query",
+    "query": "Where does DiagnosticAgent store state results and log files?",
+    "expected_files": [
+      "src/repomind/agent/diagnostic_agent.py"
+    ],
+    "expected_functions": [
+      "run"
+    ]
+  },
+  {
+    "case_id": "case_033",
+    "type": "Stack Trace",
+    "query": "KeyError: 'issue' in diagnostic_agent.py when initializing run state",
+    "expected_files": [
+      "src/repomind/agent/diagnostic_agent.py"
+    ],
+    "expected_functions": [
+      "run"
+    ]
+  },
+  {
+    "case_id": "case_034",
+    "type": "Code Query",
+    "query": "How is python code run inside SandboxExecutor in docker or subprocess?",
+    "expected_files": [
+      "src/repomind/sandbox/executor.py"
+    ],
+    "expected_functions": [
+      "run_python_code"
+    ]
+  },
+  {
+    "case_id": "case_035",
+    "type": "Stack Trace",
+    "query": "DockerException: Error connecting to docker daemon socket in executor.py",
+    "expected_files": [
+      "src/repomind/sandbox/executor.py"
+    ],
+    "expected_functions": [
+      "run_python_code",
+      "_run_docker"
+    ]
+  },
+  {
+    "case_id": "case_036",
+    "type": "Code Query",
+    "query": "Where does SandboxExecutor set process limits and subprocess timeouts?",
+    "expected_files": [
+      "src/repomind/sandbox/executor.py"
+    ],
+    "expected_functions": [
+      "run_python_code",
+      "_run_subprocess"
+    ]
+  },
+  {
+    "case_id": "case_037",
+    "type": "Stack Trace",
+    "query": "subprocess.TimeoutExpired: Command timed out after 60 seconds in executor.py",
+    "expected_files": [
+      "src/repomind/sandbox/executor.py"
+    ],
+    "expected_functions": [
+      "run_python_code",
+      "_run_subprocess"
+    ]
+  },
+  {
+    "case_id": "case_038",
+    "type": "Code Query",
+    "query": "How are evidence reports generated to Markdown text formats?",
+    "expected_files": [
+      "src/repomind/reporter/evidence_report.py"
+    ],
+    "expected_functions": [
+      "generate_markdown_report",
+      "generate_agent_report"
+    ]
+  },
+  {
+    "case_id": "case_039",
+    "type": "Stack Trace",
+    "query": "KeyError: 'root_cause' in evidence_report.py while converting RCAResult",
+    "expected_files": [
+      "src/repomind/reporter/evidence_report.py"
+    ],
+    "expected_functions": [
+      "generate_markdown_report"
+    ]
+  },
+  {
+    "case_id": "case_040",
+    "type": "Code Query",
+    "query": "How does EvidenceReporter save Markdown report string files?",
+    "expected_files": [
+      "src/repomind/reporter/evidence_report.py"
+    ],
+    "expected_functions": [
+      "save_report"
+    ]
+  },
+  {
+    "case_id": "case_041",
+    "type": "Stack Trace",
+    "query": "PermissionError: [Errno 13] Permission denied output report saving in evidence_report.py",
+    "expected_files": [
+      "src/repomind/reporter/evidence_report.py"
+    ],
+    "expected_functions": [
+      "save_report"
+    ]
+  },
+  {
+    "case_id": "case_042",
+    "type": "Code Query",
+    "query": "Where are SQLite database symbols saved and queried in SQLiteStore?",
+    "expected_files": [
+      "src/repomind/storage/sqlite_store.py"
+    ],
+    "expected_functions": [
+      "upsert_symbol",
+      "get_symbol_by_qualified_name",
+      "search_symbols"
+    ]
+  },
+  {
+    "case_id": "case_043",
+    "type": "Stack Trace",
+    "query": "sqlite3.DatabaseError: file is not a database in sqlite_store.py",
+    "expected_files": [
+      "src/repomind/storage/sqlite_store.py"
+    ],
+    "expected_functions": [
+      "__init__",
+      "_read_connect",
+      "_write_connect"
+    ]
+  },
+  {
+    "case_id": "case_044",
+    "type": "Code Query",
+    "query": "Where is the SQLite database schema initialized in SQLiteStore?",
+    "expected_files": [
+      "src/repomind/storage/sqlite_store.py"
+    ],
+    "expected_functions": [
+      "_init_db"
+    ]
+  },
+  {
+    "case_id": "case_045",
+    "type": "Code Query",
+    "query": "How does GraphStore handle node insertions and neighbors lookup?",
+    "expected_files": [
+      "src/repomind/storage/graph_store.py"
+    ],
+    "expected_functions": [
+      "add_edge",
+      "bfs_expand"
+    ]
+  },
+  {
+    "case_id": "case_046",
+    "type": "Stack Trace",
+    "query": "FileNotFoundError: [Errno 2] No such file in graph_store.py when loading graph data",
+    "expected_files": [
+      "src/repomind/storage/graph_store.py"
+    ],
+    "expected_functions": [
+      "load",
+      "__init__"
+    ]
+  },
+  {
+    "case_id": "case_047",
+    "type": "Code Query",
+    "query": "Where does GraphStore persist calling relationship graphs?",
+    "expected_files": [
+      "src/repomind/storage/graph_store.py"
+    ],
+    "expected_functions": [
+      "save",
+      "load"
+    ]
+  },
+  {
+    "case_id": "case_048",
+    "type": "Code Query",
+    "query": "How are RepoMind system configurations and .env properties loaded?",
+    "expected_files": [
+      "src/repomind/utils/config.py"
+    ],
+    "expected_functions": [
+      "load_config"
+    ]
+  },
+  {
+    "case_id": "case_049",
+    "type": "Stack Trace",
+    "query": "ValidationError: missing REPOMIND_LLM_PROVIDER in config.py at load_config",
+    "expected_files": [
+      "src/repomind/utils/config.py"
+    ],
+    "expected_functions": [
+      "load_config"
+    ]
+  },
+  {
+    "case_id": "case_050",
+    "type": "Code Query",
+    "query": "Where are the pydantic configuration schemas for LLM and Sandbox defined?",
+    "expected_files": [
+      "src/repomind/utils/config.py"
+    ],
+    "expected_functions": [
+      "RepoMindConfig"
     ]
   }
 ]

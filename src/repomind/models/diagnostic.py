@@ -37,6 +37,9 @@ class DiagnosticState(BaseModel):
     evidences: list[Evidence] = Field(default_factory=list)
     tool_history: list[ToolInvocation] = Field(default_factory=list)
     stop_reason: str | None = None
+    plan: list[str] = Field(default_factory=list)
+    current_plan_step: int = Field(default=0)
+    verification_results: list[dict] = Field(default_factory=list)
 
     def validate_evidence_references(self) -> None:
         """Raise when hypotheses or tool traces cite evidence not in this state."""
