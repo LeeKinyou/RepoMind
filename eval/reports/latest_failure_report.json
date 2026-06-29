@@ -5,7 +5,7 @@
     "top3_file_hit_rate": 1.0,
     "function_hit_rate": 1.0,
     "avg_latency": 0.0002,
-    "generated_at": "2026-06-25T21:13:44.449228"
+    "generated_at": "2026-06-29T21:07:27.836599"
   },
   "failure_categories": {
     "missed_recall": 0,
