@@ -90,83 +90,83 @@ repomind visualize AuthService --depth 3 --format mermaid
 | `repomind mcp` | 启动 Stdio 模式的 MCP Server 服务端口 | `repomind mcp` |
 | `repomind eval` | 运行基准评测 | `repomind eval --project .` |
 
-## Evaluation
+## 基准评测
 
-RepoMind includes a rigorous benchmark for repository-level code retrieval and stack trace localization.
+RepoMind 内置了针对仓库级代码检索和堆栈轨迹定位的严谨基准评测。
 
-### Metrics
+### 评测指标
 
-- **Top-1 File Hit Rate**: Rate of correct file being ranked first.
-- **Top-3 File Hit Rate**: Rate of correct file being recalled in top-3 candidates.
-- **Function Hit Rate**: Rigorous file-bound function matching accuracy.
-- **Latency**: Average retrieval response time per case.
+- **Top-1 文件命中率**：目标文件被排在第一位的比例。
+- **Top-3 文件命中率**：目标文件在前三个候选结果中被召回的比例。
+- **函数命中率**：与文件绑定的目标函数精准匹配的比例。
+- **平均延迟**：每个测试用例检索的平均响应时间。
 
-### Current Result
+### 当前评测结果
 
-We evaluated the performance comparing different retrieval configurations against 50 repository understanding and traceback cases:
+我们针对 50 个仓库理解与报错堆栈定位用例，对比评估了不同检索配置下的性能表现：
 
-| Mode | Top-1 File Hit | Top-3 File Hit | Function Hit | Avg Latency |
+| 检索模式 | Top-1 文件命中率 | Top-3 文件命中率 | 函数命中率 | 平均延迟 |
 |---|---:|---:|---:|---:|
 | `keyword_only` | 70.0% | 96.0% | 88.3% | 0.021s |
 | `symbol_only` | 80.0% | 96.0% | 98.0% | 0.038s |
 | `hybrid` (RRF Fuse) | 56.0% | 94.0% | 94.0% | 0.194s |
 | **`full` (Rerank + AST + Boost)** | **92.0%** | **98.0%** | **96.0%** | **0.037s** |
 
-### Key Finding
+### 核心结论
 
-The benchmark shows that the **`full` mode** utilizing AST-based symbol indexing, stack trace structured parsing, and scoring boosts significantly outperforms raw Reciprocal Rank Fusion (`hybrid`) and keyword baselines. Top-1 file hit rates increased from **56.0% to 92.0%**, and Function Hit rates improved from **94.0% to 96.0%** (with `symbol_only` achieving **98.0%** on structured symbol-targeted queries).
+评测结果表明，利用基于 AST 的符号索引、结构化堆栈轨迹解析以及多维得分加权的 **`full` 模式**，其性能显著优于原始的双向互惠排名融合（`hybrid`）和纯关键字基线。Top-1 文件命中率从 **56.0% 提升至 92.0%**，函数命中率从 **94.0% 提升至 96.0%**（其中 `symbol_only` 模式在针对结构化符号的目标查询中达到了 **98.0%**）。
 
-### Failure Analysis
+### 失败案例分析
 
-RepoMind automatically generates failure and latency reports under the reports folder:
+RepoMind 会在 `eval/reports/` 目录下自动生成失败案例和延迟分析报告：
 - [latest_failure_report.md](file:///f:/VScode%20Workspace/Python_workspace/RepoMind/eval/reports/latest_failure_report.md)
 - [latest_failure_report.json](file:///f:/VScode%20Workspace/Python_workspace/RepoMind/eval/reports/latest_failure_report.json)
 
-The evaluator categorizes errors into missed recall, ranking errors, function misses, stack trace parsing failures, and warning anomalies to enable rapid diagnostics and iterative optimization.
+评测器将错误分类为召回遗漏（missed recall）、排序错误（ranking errors）、函数缺失（function misses）、堆栈解析失败（stack trace parsing failures）以及警告异常，以便于进行快速定位和迭代优化。
 
-To run the comparison benchmark:
+运行对比基准评测：
 ```bash
 uv run python eval/run_host_comparison.py --compare-modes
 ```
 
-### Evaluation Modes
+### 评测模式
 
-RepoMind supports multiple retrieval modes for comparison:
+RepoMind 支持多种检索模式进行对比：
 
-| Mode | Description |
+| 模式 | 描述 |
 |---|---|
-| keyword_only | Keyword/token-overlap based retrieval baseline |
-| symbol_only | AST symbol-index based diagnostic baseline |
-| hybrid | Naive hybrid retrieval mode |
-| full | Full pipeline with stack trace parsing, path-aware scoring, symbol-aware signals and reranking |
+| keyword_only | 基于关键字/Token 重叠度的检索基线 |
+| symbol_only | 基于 AST 符号索引的诊断基线 |
+| hybrid | 朴素的混合检索模式 |
+| full | 完整管道：包含堆栈轨迹解析、路径感知得分、符号感知信号和二次重排 |
 
-`symbol_only` was previously a diagnostic baseline that suffered from path mapping issues (scoring 0%). After implementing AST symbol index fixes, RetrievalResult schema alignment, and file-level result aggregation, `symbol_only` now successfully resolves symbol references, achieving **80.0% Top-1 File Hit** and **98.0% Function Hit** on structured symbol-targeted queries.
+`symbol_only` 此前作为诊断基线时由于路径映射问题得分为 0%。在修复了 AST 符号索引、对齐了 `RetrievalResult` 数据结构并改进了文件级结果聚合逻辑后，`symbol_only` 现在能够成功解析符号引用，在针对结构化符号的目标查询中达到了 **80.0% 的 Top-1 文件命中率** 和 **98.0% 的函数命中率**。
 
-### Sandbox Modes
+### 沙箱模式
 
-RepoMind supports three sandbox modes:
+RepoMind 支持三种沙箱执行模式：
 
-| Mode | Behavior |
+| 模式 | 运行行为 |
 |---|---|
-| auto | Use Docker if available, otherwise fallback to subprocess |
-| docker | Require Docker daemon and fail fast if unavailable |
-| subprocess | Run locally without Docker isolation |
+| auto | 若 Docker 可用则使用 Docker，否则自动降级为受限子进程模式 |
+| docker | 强制要求 Docker 守护进程，如果不可用则快速报错失败 |
+| subprocess | 在本地直接运行，不使用 Docker 隔离 |
 
-For local benchmark evaluation, subprocess mode is usually enough:
+对于本地基准评测，使用子进程模式通常已经足够：
 
 ```bash
 uv run python eval/run_host_comparison.py --compare-modes --sandbox subprocess
 ```
 
-For isolated patch verification, start Docker Desktop and use:
+如需进行隔离的补丁验证，请启动 Docker Desktop 并运行：
 
 ```bash
 uv run python eval/run_host_comparison.py --sandbox docker
 ```
 
-On Windows, make sure Docker Desktop is running before using Docker sandbox.
+在 Windows 系统上，使用 Docker 沙箱前请确保 Docker Desktop 正在运行。
 
-Detailed test methodology and agent-mode comparison reports are documented under [Agent Benchmark](docs/testing/agent_benchmark.md).
+详细的测试方法和智能体模式对比报告请参阅 [智能体基准评测](docs/testing/agent_benchmark.md)。
 
 ## 项目结构
 
