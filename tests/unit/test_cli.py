@@ -34,3 +34,7 @@ class TestCLIHelp:
     def test_clear_help(self):
         result = runner.invoke(app, ["clear", "--help"])
         assert result.exit_code == 0
+
+    def test_watch_help(self):
+        result = runner.invoke(app, ["watch", "--help"])
+        assert result.exit_code == 0

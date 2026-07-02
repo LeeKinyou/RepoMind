@@ -255,6 +255,83 @@ def clear(
 
 
 @app.command()
+def watch(
+    project: str = typer.Option(".", "--project", "-p", help="Project directory"),
+    interval: float = typer.Option(1.0, "--interval", "-i", help="Polling interval seconds"),
+    once: bool = typer.Option(False, "--once", help="Run one freshness check and exit"),
+):
+    """Watch the workspace and refresh the index when files change."""
+    import time
+    from repomind.cli.repl import RepoMindREPL
+
+    proj = Path(project).resolve()
+    if not proj.exists():
+        console.print(Text(f"  Path not found: {project}", style="red"))
+        raise typer.Exit(1)
+
+    repl = RepoMindREPL(proj)
+    console.print(Text(f"  Watching {proj}", style="cyan"))
+
+    def refresh_once() -> None:
+        result = repl.index_service.refresh_if_stale(str(proj))
+        if result is not None:
+            console.print(
+                Text(
+                    f"  Refreshed index v{repl.index_service.get_index_version()} "
+                    f"({result.indexed_files} files)",
+                    style="green",
+                )
+            )
+        else:
+            freshness = repl.index_service.check_freshness(str(proj))
+            console.print(Text(f"  Freshness: {freshness.status.value}", style="green"))
+
+    if once:
+        refresh_once()
+        return
+
+    try:
+        from watchdog.events import FileSystemEventHandler
+        from watchdog.observers import Observer
+
+        class RefreshHandler(FileSystemEventHandler):
+            def __init__(self) -> None:
+                self.last_refresh = 0.0
+
+            def on_any_event(self, event) -> None:
+                src_path = getattr(event, "src_path", "")
+                if not src_path.endswith(".py"):
+                    return
+                now = time.monotonic()
+                if now - self.last_refresh < max(0.1, interval):
+                    return
+                self.last_refresh = now
+                refresh_once()
+
+        observer = Observer()
+        observer.schedule(RefreshHandler(), str(proj), recursive=True)
+        observer.start()
+        try:
+            while True:
+                time.sleep(1.0)
+        except KeyboardInterrupt:
+            observer.stop()
+        observer.join()
+        return
+    except Exception as e:
+        console.print(
+            Text(
+                f"  Watchdog unavailable, falling back to polling: {e}",
+                style="yellow",
+            )
+        )
+
+    while True:
+        refresh_once()
+        time.sleep(max(0.1, interval))
+
+
+@app.command()
 def repl(
     project: str = typer.Option(".", "--project", "-p", help="Project directory"),
 ):

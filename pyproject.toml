@@ -18,6 +18,7 @@ dependencies = [
     "mcp>=1.28,<2",
     "langgraph>=1.2.6",
     "langchain-core>=1.4.8",
+    "watchdog>=6.0.0",
 ]
 
 [project.optional-dependencies]

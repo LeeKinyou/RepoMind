@@ -1,4 +1,5 @@
 """MCP Tools registration for RepoMind."""
+import json
 import os
 from mcp.server.fastmcp import FastMCP
 from repomind.indexer.file_scanner import IndexService
@@ -35,6 +36,92 @@ def register_tools(mcp: FastMCP):
             content_text += "- Errors encountered:\n" + "\n".join(f"  * {e}" for e in res.errors)
         return content_text
 
+    @mcp.tool(name="repomind.refresh_index")
+    def repomind_refresh_index(repo_path: str | None = None) -> str:
+        """Refresh the index only when the workspace has changed since the last snapshot."""
+        repo_path = repo_path or os.getcwd()
+        index_svc = IndexService(index_dir=_get_index_dir(repo_path))
+        res = index_svc.refresh_if_stale(repo_path)
+        freshness = index_svc.check_freshness(repo_path)
+        if res is None:
+            return (
+                "Index is already current.\n"
+                f"- Index Version: {freshness.index_version}\n"
+                f"- Checked Files: {freshness.checked_files}\n"
+            )
+        return (
+            "Index refreshed.\n"
+            f"- Success: {res.success}\n"
+            f"- Index Version: {index_svc.get_index_version()}\n"
+            f"- Indexed Files: {res.indexed_files}\n"
+            f"- Symbols Found: {res.total_symbols}\n"
+        )
+
+    @mcp.tool(name="repomind.validate_index_freshness")
+    def repomind_validate_index_freshness(repo_path: str | None = None) -> str:
+        """Validate whether the current workspace still matches the persisted index snapshot."""
+        repo_path = repo_path or os.getcwd()
+        index_svc = IndexService(index_dir=_get_index_dir(repo_path))
+        freshness = index_svc.check_freshness(repo_path)
+        lines = [
+            f"Freshness: {freshness.status.value}",
+            f"Index Version: {freshness.index_version}",
+            f"Checked Files: {freshness.checked_files}",
+        ]
+        if freshness.changed_files:
+            lines.append("Changed Files: " + ", ".join(freshness.changed_files))
+        if freshness.new_files:
+            lines.append("New Files: " + ", ".join(freshness.new_files))
+        if freshness.deleted_files:
+            lines.append("Deleted Files: " + ", ".join(freshness.deleted_files))
+        if freshness.errors:
+            lines.append("Errors: " + "; ".join(freshness.errors))
+        return "\n".join(lines)
+
+    @mcp.tool(name="repomind.validate_evidence")
+    def repomind_validate_evidence(
+        report_json: str | None = None,
+        file_hashes: dict[str, str] | None = None,
+        repo_path: str | None = None,
+    ) -> str:
+        """Validate report-bound file hashes against the current workspace."""
+        repo_path = repo_path or os.getcwd()
+        hashes = file_hashes or {}
+        if report_json and not hashes:
+            try:
+                data = json.loads(report_json)
+                snapshot = data.get("snapshot") or {}
+                hashes = snapshot.get("file_hashes") or {}
+            except Exception as e:
+                return f"Could not parse report JSON: {e}"
+
+        if not hashes:
+            return "No file hashes supplied. Provide report_json or file_hashes."
+
+        index_svc = IndexService(index_dir=_get_index_dir(repo_path))
+        freshness = index_svc.validate_file_hashes(repo_path, hashes)
+        lines = [
+            f"Evidence Freshness: {freshness.status.value}",
+            f"Checked Files: {freshness.checked_files}",
+        ]
+        if freshness.changed_files:
+            lines.append("Changed Evidence Files: " + ", ".join(freshness.changed_files))
+        if freshness.deleted_files:
+            lines.append("Deleted Evidence Files: " + ", ".join(freshness.deleted_files))
+        if freshness.errors:
+            lines.append("Errors: " + "; ".join(freshness.errors))
+        return "\n".join(lines)
+
+    @mcp.tool(name="repomind.changed_files_since")
+    def repomind_changed_files_since(repo_path: str | None = None) -> str:
+        """Return changed Python files according to the git working tree."""
+        repo_path = repo_path or os.getcwd()
+        index_svc = IndexService(index_dir=_get_index_dir(repo_path))
+        changed = index_svc.changed_files_since(repo_path)
+        if not changed:
+            return "No changed Python files detected by git status."
+        return "\n".join(f"- {path}" for path in changed)
+
     @mcp.tool(name="repomind.search_symbols")
     def repomind_search_symbols(query: str, max_results: int = 5, repo_path: str | None = None) -> str:
         """Perform code-aware hybrid search (BM25 + SQLite DB) and return AI-generated answer."""
@@ -42,7 +129,7 @@ def register_tools(mcp: FastMCP):
         if not os.path.exists(os.path.join(index_dir, "index.db")):
             return f"Index database not found in {index_dir}. Please run 'repomind.index_repository' first."
 
-        query_svc = QueryService(index_dir=index_dir)
+        query_svc = QueryService(index_dir=index_dir, project_root=repo_path)
         opts = QueryOptions(max_results=max_results)
         res = query_svc.search(query, options=opts)
 
@@ -64,6 +151,8 @@ def register_tools(mcp: FastMCP):
             return f"Index database not found in {index_dir}."
             
         from repomind.storage.sqlite_store import SQLiteStore
+        repo = repo_path or os.getcwd()
+        IndexService(index_dir=index_dir).refresh_if_stale(repo)
         sqlite = SQLiteStore(os.path.join(index_dir, "index.db"))
         sym = sqlite.get_symbol_by_qualified_name(qualified_name)
         if not sym:
@@ -74,7 +163,6 @@ def register_tools(mcp: FastMCP):
         end_line = sym.get("end_line", 0)
         
         try:
-            repo = repo_path or os.getcwd()
             full_path = os.path.join(repo, file_path)
             with open(full_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
@@ -91,7 +179,7 @@ def register_tools(mcp: FastMCP):
         if not os.path.exists(os.path.join(index_dir, "index.db")):
             return f"Index database not found in {index_dir}. Please run 'repomind.index_repository' first."
 
-        query_svc = QueryService(index_dir=index_dir)
+        query_svc = QueryService(index_dir=index_dir, project_root=repo_path)
         res = query_svc.get_call_graph(qualified_name, depth=depth)
 
         content_text = f"### Call Graph for `{qualified_name}` (Depth: {depth})\n"

@@ -26,3 +26,7 @@ async def test_mcp_tools_registered():
     assert "repomind.expand_symbol_relations" in tool_names
     assert "repomind.find_failure_evidence" in tool_names
     assert "repomind.run_diagnostic_agent" in tool_names
+    assert "repomind.refresh_index" in tool_names
+    assert "repomind.validate_index_freshness" in tool_names
+    assert "repomind.validate_evidence" in tool_names
+    assert "repomind.changed_files_since" in tool_names

@@ -13,14 +13,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import litellm
 from rich.align import Align
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
-
-import litellm
-litellm.suppress_debug_info = True
-litellm.telemetry = False
 
 from repomind.cli.themes import REPOIND_THEME
 from repomind.cli.components import show_banner
@@ -31,6 +28,9 @@ from repomind.cli.prompt_utils import (
     suggest_command,
     prompt_string,
 )
+
+litellm.suppress_debug_info = True
+litellm.telemetry = False
 
 
 class LazyServiceProxy:
@@ -78,7 +78,7 @@ class RepoMindREPL:
 
         def make_query_service():
             from repomind.retriever.query_service import QueryService
-            return QueryService(index_dir=str(index_dir))
+            return QueryService(index_dir=str(index_dir), project_root=str(self.project))
 
         def make_rca_service():
             from repomind.context.context_builder import RCAService
