@@ -14,6 +14,8 @@ RepoMind 是一款面向大型代码仓库的 **Repository Intelligence Platform
 - **双模式诊断** — 提供 Deterministic Evidence 模式（无需 LLM）和 Agent 模式（基于 LangGraph 状态机工作流与 ReAct 环路）供不同场景选择
 - **MCP 协议对接** — 提供标准 Stdio 协议的官方 FastMCP Server，能无缝集成至 Claude Desktop、Cursor 等外部 AI 智能体工作流
 - **结构化证据报告** — 支持一键将 RCA 根因定位结果导出为包含详细诊断链、修复补丁和影响面评估的 Markdown / JSON 证据报告
+- **动态索引一致性** — 查询与 RCA 前自动执行 freshness gate，代码变更后通过增量刷新、`index_version`、文件 hash snapshot 和 Evidence 校验避免旧索引解释新代码
+- **实时监听更新** — 提供 `repomind watch`，基于 `watchdog` 文件系统事件监听 Python 文件变更并自动刷新索引，事件不可用时回退到轮询
 - **基准性能评估** — 内置评估框架与 Bug 基准用例，自动运行并统计 Top-1/Top-3 文件命中率、函数定位率等诊断效率指标
 - **100% 本地运行** — 零配置开箱即用，支持离线退避策略，数据不离开本机
 
@@ -38,6 +40,17 @@ claude mcp add repomind uv run repomind mcp
 在 Cursor 的 MCP 选项卡中，添加新 Server：
 - Type: `command`
 - Command: `uv run repomind mcp`
+
+### MCP 动态索引工具
+
+RepoMind MCP Server 额外暴露动态一致性工具，方便外部智能体在修改代码后刷新和校验证据：
+
+| 工具 | 作用 |
+|---|---|
+| `repomind.refresh_index` | 工作区 stale 时执行增量刷新 |
+| `repomind.validate_index_freshness` | 校验当前磁盘代码是否仍匹配索引 snapshot |
+| `repomind.validate_evidence` | 校验 Evidence Report 绑定的文件 hash 是否仍 current |
+| `repomind.changed_files_since` | 基于 Git working tree 返回变更的 Python 文件 |
 
 ## 快速开始
 
@@ -75,7 +88,22 @@ repomind rca --trace error.log
 
 # 4. 架构可视化
 repomind visualize AuthService --depth 3 --format mermaid
+
+# 5. 监听代码变更并自动刷新索引
+repomind watch --project ./my-project
 ```
+
+## 动态索引与一致性
+
+RepoMind 面向智能体修改代码后的连续诊断场景，不再假设仓库是静态的。每次成功索引都会推进 `index_version`，并将文件 `path + hash` 作为 snapshot 写入索引。查询、符号查看、调用图扩展和 RCA 分析前会自动检查 freshness；如果检测到文件被修改、新增或删除，会先执行增量刷新，再基于当前 snapshot 检索和生成证据。
+
+Evidence Report 的 Markdown/JSON 输出会绑定：
+
+- `index_version`
+- `freshness_status`
+- 参与证据文件的 hash
+
+因此，外部智能体或用户可以通过 MCP 的 `repomind.validate_evidence` 判断旧报告是否仍适用于当前代码。
 
 ## 命令概览
 
@@ -86,6 +114,7 @@ repomind visualize AuthService --depth 3 --format mermaid
 | `repomind rca` | 交互式/文件根因分析 | `repomind rca --trace error.log` |
 | `repomind diagnose <trace_file>` | 根因分析并输出 Markdown/JSON 诊断证据报告 | `repomind diagnose error.log --mode agent -o report.md` |
 | `repomind visualize <symbol>` | 架构可视化 | `repomind visualize UserService --format mermaid` |
+| `repomind watch` | 监听 Python 文件变更并自动刷新索引 | `repomind watch --project .` |
 | `repomind stats` | 显示索引统计 | `repomind stats` |
 | `repomind mcp` | 启动 Stdio 模式的 MCP Server 服务端口 | `repomind mcp` |
 | `repomind eval` | 运行基准评测 | `repomind eval --project .` |
@@ -235,6 +264,7 @@ RepoMind/
 | LLM 接口 | LiteLLM | 一行切换本地/云端模型 |
 | CLI | Typer | 生产级命令行界面 |
 | 终端美化 | Rich | 彩色面板与进度条 |
+| 文件监听 | watchdog | 事件驱动监听代码变更并触发增量刷新 |
 
 ## 文档
 
@@ -249,6 +279,7 @@ RepoMind/
 - [数据库设计文档](docs/design/数据库设计文档.md) — SQLite 表结构、sqlite-vec 向量设计、NetworkX 图设计
 - [API 接口文档](docs/design/API接口文档.md) — 核心服务接口定义、数据模型、使用示例
 - [安全设计文档](docs/design/安全设计文档.md) — 沙箱隔离、命令过滤、Prompt 注入防御
+- [动态索引一致性与时效性方案](docs/design/动态索引一致性与时效性方案.md) — 代码变更后的 freshness gate、增量刷新、Evidence snapshot 与 MCP 校验设计
 
 **开发相关** (`docs/dev/`)：
 - [技术可行性调研](docs/dev/技术可行性调研.md) — 工具选型对比与关键技术算法
