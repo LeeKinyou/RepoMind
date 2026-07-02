@@ -5,7 +5,14 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from repomind.models.schemas import IndexOptions, IndexResult, FileInfo
+from repomind.models.schemas import (
+    FileInfo,
+    FreshnessReport,
+    FreshnessStatus,
+    IndexSnapshot,
+    IndexOptions,
+    IndexResult,
+)
 from repomind.indexer.ast_parser import TreeSitterParser, ParsedFile
 from repomind.indexer.inference_engine import TypeInferenceEngine
 from repomind.graph.call_graph_builder import CallGraphBuilder
@@ -108,6 +115,8 @@ class IndexService:
             self.graph.save(str(self.index_dir / "graph.json"))
         except Exception as e:
             errors.append(f"Failed to save call graph: {e}")
+
+        self._advance_index_version()
 
         elapsed = time.time() - start_time
         indexed = total_files - skipped
@@ -345,6 +354,171 @@ class IndexService:
         """Get index statistics."""
         return self.sqlite.get_stats()
 
+    def get_index_version(self) -> int:
+        """Return the current persisted index snapshot version."""
+        return self.sqlite.get_stat("index_version", 0)
+
+    def check_freshness(
+        self, path: str, options: IndexOptions | None = None
+    ) -> FreshnessReport:
+        """Compare current workspace files with hashes persisted in the index."""
+        options = options or IndexOptions()
+        project_path = Path(path).resolve()
+        errors: list[str] = []
+
+        if not project_path.exists():
+            return FreshnessReport(
+                status=FreshnessStatus.STALE,
+                index_version=self.get_index_version(),
+                errors=[f"Path not found: {path}"],
+            )
+
+        py_files = self._collect_files(project_path, options)
+        current_hashes: dict[str, str] = {}
+
+        for fp in py_files:
+            try:
+                rel_path = str(fp.relative_to(project_path).as_posix())
+                current_hashes[rel_path] = self._hash_file(fp.read_bytes())
+            except Exception as e:
+                errors.append(f"Failed to hash {fp}: {e}")
+
+        indexed_hashes = {
+            str(Path(row["path"]).as_posix()): row["hash"]
+            for row in self.sqlite.get_all_files()
+        }
+
+        current_paths = set(current_hashes)
+        indexed_paths = set(indexed_hashes)
+        new_files = sorted(current_paths - indexed_paths)
+        deleted_files = sorted(indexed_paths - current_paths)
+        changed_files = sorted(
+            path
+            for path in current_paths & indexed_paths
+            if current_hashes[path] != indexed_hashes[path]
+        )
+        unchanged_files = sorted(
+            path
+            for path in current_paths & indexed_paths
+            if current_hashes[path] == indexed_hashes[path]
+        )
+        status = (
+            FreshnessStatus.STALE
+            if errors or new_files or deleted_files or changed_files
+            else FreshnessStatus.CURRENT
+        )
+
+        return FreshnessReport(
+            status=status,
+            index_version=self.get_index_version(),
+            checked_files=len(current_hashes),
+            unchanged_files=unchanged_files,
+            changed_files=changed_files,
+            new_files=new_files,
+            deleted_files=deleted_files,
+            errors=errors,
+        )
+
+    def refresh_if_stale(
+        self, path: str, options: IndexOptions | None = None
+    ) -> IndexResult | None:
+        """Run an incremental refresh only when the workspace/index snapshot is stale."""
+        options = options or IndexOptions()
+        freshness = self.check_freshness(path, options)
+        if freshness.status == FreshnessStatus.CURRENT:
+            return None
+
+        refresh_options = options.model_copy(update={"incremental": True})
+        return self.index_directory(path, refresh_options)
+
+    def get_snapshot(
+        self,
+        file_paths: list[str] | None = None,
+        freshness_status: FreshnessStatus = FreshnessStatus.CURRENT,
+        errors: list[str] | None = None,
+    ) -> IndexSnapshot:
+        """Build index snapshot metadata for reports and query results."""
+        wanted = {Path(p).as_posix() for p in file_paths or [] if p}
+        file_hashes = {}
+        for row in self.sqlite.get_all_files():
+            rel_path = Path(row["path"]).as_posix()
+            if not wanted or rel_path in wanted:
+                file_hashes[rel_path] = row["hash"]
+        return IndexSnapshot(
+            index_version=self.get_index_version(),
+            freshness_status=freshness_status,
+            file_hashes=file_hashes,
+            errors=errors or [],
+        )
+
+    def changed_files_since(self, path: str) -> list[str]:
+        """Return git working-tree changed Python files when the path is a git repo."""
+        import subprocess
+
+        project_path = Path(path).resolve()
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(project_path), "status", "--porcelain"],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=5,
+            )
+        except Exception:
+            return []
+
+        if result.returncode != 0:
+            return []
+
+        changed = []
+        for line in result.stdout.splitlines():
+            if not line or len(line) < 4:
+                continue
+            rel = line[3:].strip()
+            if " -> " in rel:
+                rel = rel.split(" -> ", 1)[1].strip()
+            rel = rel.replace("\\", "/")
+            if rel.endswith(".py"):
+                changed.append(rel)
+        return sorted(set(changed))
+
+    def validate_file_hashes(
+        self, path: str, expected_hashes: dict[str, str]
+    ) -> FreshnessReport:
+        """Validate report-bound file hashes against the current workspace."""
+        project_path = Path(path).resolve()
+        changed_files = []
+        deleted_files = []
+        errors = []
+
+        for rel_path, expected_hash in expected_hashes.items():
+            normalized = Path(rel_path).as_posix()
+            file_path = project_path / normalized
+            if not file_path.exists():
+                deleted_files.append(normalized)
+                continue
+            try:
+                current_hash = self._hash_file(file_path.read_bytes())
+            except Exception as e:
+                errors.append(f"Failed to hash {normalized}: {e}")
+                continue
+            if current_hash != expected_hash:
+                changed_files.append(normalized)
+
+        status = (
+            FreshnessStatus.STALE
+            if changed_files or deleted_files or errors
+            else FreshnessStatus.CURRENT
+        )
+        return FreshnessReport(
+            status=status,
+            index_version=self.get_index_version(),
+            checked_files=len(expected_hashes),
+            changed_files=sorted(changed_files),
+            deleted_files=sorted(deleted_files),
+            errors=errors,
+        )
+
     def clear(self) -> None:
         """Clear all index data."""
         self.sqlite.clear()
@@ -397,3 +571,6 @@ class IndexService:
         import hashlib
 
         return hashlib.sha256(content).hexdigest()[:16]
+
+    def _advance_index_version(self) -> None:
+        self.sqlite.set_stat("index_version", self.get_index_version() + 1)

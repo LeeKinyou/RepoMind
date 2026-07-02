@@ -114,6 +114,35 @@ class IndexResult(BaseModel):
 # === 查询模型 ===
 
 
+class FreshnessStatus(str, Enum):
+    """Whether the on-disk workspace still matches the persisted index snapshot."""
+
+    CURRENT = "current"
+    STALE = "stale"
+
+
+class FreshnessReport(BaseModel):
+    """Workspace/index freshness comparison based on persisted file hashes."""
+
+    status: FreshnessStatus
+    index_version: int = 0
+    checked_files: int = 0
+    unchanged_files: list[str] = Field(default_factory=list)
+    changed_files: list[str] = Field(default_factory=list)
+    new_files: list[str] = Field(default_factory=list)
+    deleted_files: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class IndexSnapshot(BaseModel):
+    """Index snapshot metadata attached to query and evidence results."""
+
+    index_version: int = 0
+    freshness_status: FreshnessStatus = FreshnessStatus.CURRENT
+    file_hashes: dict[str, str] = Field(default_factory=dict)
+    errors: list[str] = Field(default_factory=list)
+
+
 class QueryOptions(BaseModel):
     """查询配置"""
 
@@ -134,6 +163,7 @@ class QueryResult(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     sources: list[str] = Field(default_factory=list)
     elapsed_seconds: float = 0.0
+    snapshot: IndexSnapshot | None = None
 
 
 # === RCA 模型 ===
@@ -165,6 +195,7 @@ class RCAResult(BaseModel):
     evidence: list[str] = Field(default_factory=list)
     evidences: list[EvidenceItem] = Field(default_factory=list)
     verification_command: str | None = None
+    snapshot: IndexSnapshot | None = None
 
 
 class FixResult(BaseModel):

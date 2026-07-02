@@ -171,3 +171,65 @@ class TestIndexingIdempotencyAndCleanup:
         # Assert database has cleaned up file, symbols, and its calls/relations
         assert stats2["files"] == stats1["files"] - 1
         assert stats2["symbols"] < stats1["symbols"]
+
+
+class TestFreshnessChecks:
+    def test_freshness_is_current_after_index(self, index_service, sample_project):
+        index_service.index_directory(str(sample_project))
+
+        freshness = index_service.check_freshness(str(sample_project))
+
+        assert freshness.status == "current"
+        assert freshness.changed_files == []
+        assert freshness.new_files == []
+        assert freshness.deleted_files == []
+        assert freshness.index_version >= 1
+
+    def test_freshness_detects_modified_new_and_deleted_files(
+        self, index_service, sample_project
+    ):
+        index_service.index_directory(str(sample_project))
+
+        (sample_project / "auth.py").write_text(
+            "def changed_login():\n    return True\n",
+            encoding="utf-8",
+        )
+        (sample_project / "new_module.py").write_text(
+            "def new_feature():\n    return 'ok'\n",
+            encoding="utf-8",
+        )
+        (sample_project / "utils.py").unlink()
+
+        freshness = index_service.check_freshness(str(sample_project))
+
+        assert freshness.status == "stale"
+        assert freshness.changed_files == ["auth.py"]
+        assert freshness.new_files == ["new_module.py"]
+        assert freshness.deleted_files == ["utils.py"]
+
+    def test_refresh_if_stale_reindexes_and_advances_version(
+        self, index_service, sample_project
+    ):
+        index_service.index_directory(str(sample_project))
+        first_version = index_service.get_index_version()
+
+        (sample_project / "auth.py").write_text(
+            "def changed_login():\n    return True\n",
+            encoding="utf-8",
+        )
+
+        result = index_service.refresh_if_stale(str(sample_project))
+
+        assert result is not None
+        assert result.success is True
+        assert index_service.get_index_version() > first_version
+        assert index_service.check_freshness(str(sample_project)).status == "current"
+
+    def test_refresh_if_stale_skips_when_current(self, index_service, sample_project):
+        index_service.index_directory(str(sample_project))
+        first_version = index_service.get_index_version()
+
+        result = index_service.refresh_if_stale(str(sample_project))
+
+        assert result is None
+        assert index_service.get_index_version() == first_version
