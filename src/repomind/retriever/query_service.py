@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import logging
 import time
+from pathlib import Path
+
 from repomind.utils.errors import QueryError
-
-logger = logging.getLogger(__name__)
-
 from repomind.models.schemas import (
     QueryOptions,
     QueryResult,
@@ -16,9 +14,12 @@ from repomind.models.schemas import (
     CallGraphResult,
     safe_symbol_type,
 )
+from repomind.indexer.file_scanner import IndexService
 from repomind.storage.sqlite_store import SQLiteStore
 from repomind.storage.graph_store import GraphStore
 from repomind.retriever.hybrid_retriever import HybridRetriever
+
+logger = logging.getLogger(__name__)
 
 
 class QueryService:
@@ -30,11 +31,16 @@ class QueryService:
         sqlite: SQLiteStore | None = None,
         graph: GraphStore | None = None,
         retriever: HybridRetriever | None = None,
+        project_root: str | None = None,
+        auto_refresh: bool = True,
     ):
         from repomind.utils.config import load_config
         from repomind.utils.errors import GraphLoadError
         if index_dir is None:
             index_dir = load_config().index_dir
+        self.index_dir = str(index_dir)
+        self.project_root = Path(project_root).resolve() if project_root else Path(index_dir).resolve().parent
+        self.auto_refresh = auto_refresh
         self.sqlite = sqlite or SQLiteStore(str(Path(index_dir) / "index.db"))
         self.graph = graph or GraphStore()
         if graph is None:
@@ -47,6 +53,11 @@ class QueryService:
                         "Failed to load graph: %s. Starting with empty graph.", e
                     )
         self.retriever = retriever or HybridRetriever(self.sqlite, self.graph)
+        self.index_service = IndexService(
+            index_dir=self.index_dir,
+            sqlite=self.sqlite,
+            graph=self.graph,
+        )
 
     def _dict_to_symbol_info(self, sym_dict: dict) -> SymbolInfo:
         return SymbolInfo(
@@ -64,6 +75,7 @@ class QueryService:
         """Execute local hybrid retrieval query without LLM calls."""
         start = time.time()
         options = options or QueryOptions()
+        self._ensure_fresh()
 
         try:
             results = self.retriever.retrieve(
@@ -91,7 +103,7 @@ class QueryService:
 
         symbols = []
         sources = []
-        project_root = Path(self.sqlite.db_path).parent.parent
+        project_root = self.project_root
 
         for r in results:
             sym_info = self._dict_to_symbol_info(r.symbol)
@@ -150,7 +162,18 @@ class QueryService:
             confidence=min(1.0, max(0.0, max((r.score if r.score <= 1.0 else min(0.99, r.score / 200.0) for r in results), default=0.0))),
             sources=list(set(sources)),
             elapsed_seconds=round(elapsed, 3),
+            snapshot=self.index_service.get_snapshot(
+                sorted({sym.file_path for sym in symbols})
+            ),
         )
+
+    def _ensure_fresh(self) -> None:
+        if not self.auto_refresh:
+            return
+        try:
+            self.index_service.refresh_if_stale(str(self.project_root))
+        except Exception as e:
+            logger.warning("Failed to refresh stale index before query: %s", e)
 
     def answer(self, query: str, query_res: QueryResult) -> str:
         """Generate LLM summary answering the query based on retrieved contexts."""
@@ -207,6 +230,7 @@ class QueryService:
 
     def lookup_symbol(self, query: str, limit: int = 1) -> list[SymbolInfo]:
         """Look up symbols locally from database/retriever without calling LLM."""
+        self._ensure_fresh()
         try:
             results = self.retriever.retrieve(query, top_k=limit)
             return [self._dict_to_symbol_info(r.symbol) for r in results]
@@ -215,6 +239,7 @@ class QueryService:
 
     def get_symbol_info(self, qualified_name: str) -> SymbolInfo | None:
         """Get detailed symbol info by qualified name."""
+        self._ensure_fresh()
         sym = self.sqlite.get_symbol_by_qualified_name(qualified_name)
         if not sym:
             return None
@@ -222,6 +247,7 @@ class QueryService:
 
     def get_call_graph(self, qualified_name: str, depth: int = 2) -> CallGraphResult:
         """Get call graph for a symbol."""
+        self._ensure_fresh()
         expanded = self.graph.bfs_expand(qualified_name, hops=depth)
         return self.graph.get_subgraph(expanded)
 

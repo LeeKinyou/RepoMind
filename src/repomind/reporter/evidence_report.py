@@ -92,12 +92,30 @@ class EvidenceReporter:
             "# RepoMind Evidence Report",
             f"**Generated At**: {timestamp}",
             f"**Confidence Score**: {rca_result.confidence * 100:.1f}%",
+        ]
+        if rca_result.snapshot:
+            lines.extend(
+                [
+                    f"**Index Version**: {rca_result.snapshot.index_version}",
+                    f"**Freshness**: {rca_result.snapshot.freshness_status.value}",
+                ]
+            )
+            if rca_result.snapshot.file_hashes:
+                lines.append("")
+                lines.append("## Index Snapshot")
+                for file_path, file_hash in sorted(
+                    rca_result.snapshot.file_hashes.items()
+                ):
+                    lines.append(f"- `{file_path}`: `{file_hash}`")
+        lines.extend(
+            [
             "",
             "## 1. Query / Error",
             f"`{query}`" if query else "*No query/error trace provided.*",
             "",
             "## 2. Retrieved Evidence",
-        ]
+            ]
+        )
 
         if rca_result.evidences:
             for idx, ev in enumerate(rca_result.evidences, 1):

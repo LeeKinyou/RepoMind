@@ -65,3 +65,34 @@ RuntimeError: boom"""
         assert "raise RuntimeError" in (bundle.evidences[0].snippet or "")
         assert bundle.metadata["error_type"] == "RuntimeError"
         assert bundle.metadata["proximate_cause"]["file_path"] == "app.py"
+        assert bundle.metadata["snapshot"]["freshness_status"] == "current"
+
+    def test_analyze_trace_refreshes_stale_index_before_collecting_evidence(
+        self, tmp_path
+    ):
+        project = tmp_path / "project"
+        project.mkdir()
+        source = project / "app.py"
+        source.write_text(
+            "def run():\n    raise RuntimeError('old')\n",
+            encoding="utf-8",
+        )
+        index_dir = project / ".repomind"
+        IndexService(index_dir=str(index_dir)).index_directory(str(project))
+
+        source.write_text(
+            "def run():\n    raise RuntimeError('new')\n",
+            encoding="utf-8",
+        )
+        service = RCAService(index_dir=str(index_dir))
+
+        trace = f"""Traceback (most recent call last):
+  File "{source}", line 2, in run
+    raise RuntimeError("new")
+RuntimeError: new"""
+
+        result = service.analyze_trace(trace)
+
+        assert result.snapshot is not None
+        assert result.snapshot.freshness_status == "current"
+        assert "new" in result.evidences[0].snippet

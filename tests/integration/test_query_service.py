@@ -10,7 +10,7 @@ from repomind.models.schemas import QueryOptions
 
 @pytest.fixture
 def indexed_project(tmp_dir):
-    """Index a sample project and return the index dir."""
+    """Index a sample project and return project/index paths."""
     index_dir = str(tmp_dir / ".repomind")
     project = tmp_dir / "myproject"
     project.mkdir()
@@ -35,35 +35,58 @@ class Database:
 
     service = IndexService(index_dir=index_dir)
     service.index_directory(str(project))
-    return index_dir
+    return project, index_dir
 
 
 class TestQuerySearch:
     def test_search_returns_results(self, indexed_project):
-        service = QueryService(index_dir=indexed_project)
+        project, index_dir = indexed_project
+        service = QueryService(index_dir=index_dir, project_root=str(project))
         result = service.search("UserService")
         assert len(result.symbols) > 0
 
     def test_search_with_options(self, indexed_project):
-        service = QueryService(index_dir=indexed_project)
+        project, index_dir = indexed_project
+        service = QueryService(index_dir=index_dir, project_root=str(project))
         opts = QueryOptions(max_results=5)
         result = service.search("login", options=opts)
         assert len(result.symbols) <= 5
 
     def test_search_no_results(self, indexed_project):
-        service = QueryService(index_dir=indexed_project)
+        project, index_dir = indexed_project
+        service = QueryService(index_dir=index_dir, project_root=str(project))
         result = service.search("NonexistentThing")
         assert len(result.symbols) == 0
 
     def test_confidence_is_set(self, indexed_project):
-        service = QueryService(index_dir=indexed_project)
+        project, index_dir = indexed_project
+        service = QueryService(index_dir=index_dir, project_root=str(project))
         result = service.search("login")
         assert result.confidence >= 0.0
+
+    def test_search_refreshes_stale_index_before_retrieval(self, indexed_project):
+        project, index_dir = indexed_project
+        (project / "auth.py").write_text(
+            """
+class UserService:
+    def changed_login(self, username: str) -> bool:
+        return True
+""",
+            encoding="utf-8",
+        )
+
+        service = QueryService(index_dir=index_dir, project_root=str(project))
+        result = service.search("changed_login")
+
+        assert any(sym.name == "changed_login" for sym in result.symbols)
+        assert result.snapshot is not None
+        assert result.snapshot.freshness_status == "current"
 
 
 class TestGetSymbolInfo:
     def test_get_existing_symbol(self, indexed_project):
-        service = QueryService(index_dir=indexed_project)
+        project, index_dir = indexed_project
+        service = QueryService(index_dir=index_dir, project_root=str(project))
         # Search first to find a valid qualified name
         result = service.search("UserService")
         if result.symbols:
@@ -72,7 +95,8 @@ class TestGetSymbolInfo:
             assert info is not None
 
     def test_get_nonexistent_symbol(self, indexed_project):
-        service = QueryService(index_dir=indexed_project)
+        project, index_dir = indexed_project
+        service = QueryService(index_dir=index_dir, project_root=str(project))
         info = service.get_symbol_info("nonexistent.module.Symbol")
         assert info is None
 
@@ -81,12 +105,14 @@ class TestGraphOperations:
     """C1: Graph should be loaded from persisted file."""
 
     def test_graph_loaded(self, indexed_project):
-        service = QueryService(index_dir=indexed_project)
+        project, index_dir = indexed_project
+        service = QueryService(index_dir=index_dir, project_root=str(project))
         # Graph should be loaded, not empty
         assert service.graph.node_count >= 0  # May be 0 if graph store loads
 
     def test_get_call_graph(self, indexed_project):
-        service = QueryService(index_dir=indexed_project)
+        project, index_dir = indexed_project
+        service = QueryService(index_dir=index_dir, project_root=str(project))
         result = service.search("UserService")
         if result.symbols:
             qname = result.symbols[0].qualified_name

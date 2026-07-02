@@ -7,10 +7,12 @@ from pathlib import Path
 
 from repomind.models.evidence import Evidence, EvidenceBundle
 from repomind.models.schemas import (
+    IndexSnapshot,
     RCAResult,
     SymbolInfo,
     safe_symbol_type,
 )
+from repomind.indexer.file_scanner import IndexService
 from repomind.storage.graph_store import GraphStore
 from repomind.storage.sqlite_store import SQLiteStore
 from repomind.context.pytest_failure import PytestFailureParser
@@ -31,11 +33,13 @@ class RCAService:
         index_dir: str | None = None,
         sqlite: SQLiteStore | None = None,
         graph: GraphStore | None = None,
+        auto_refresh: bool = True,
     ):
         if index_dir is None:
             index_dir = load_config().index_dir
         self.index_dir = index_dir
         self.project_root = Path(index_dir).resolve().parent
+        self.auto_refresh = auto_refresh
         self.sqlite = sqlite or SQLiteStore(str(Path(index_dir) / "index.db"))
         self.graph = graph or GraphStore()
         if graph is None:
@@ -49,6 +53,20 @@ class RCAService:
                     )
         
         self.parsers: list[TraceParser] = [PythonTracebackParser(), PytestFailureParser()]
+        self.index_service = IndexService(
+            index_dir=self.index_dir,
+            sqlite=self.sqlite,
+            graph=self.graph,
+        )
+
+    def _ensure_fresh(self) -> IndexSnapshot:
+        if self.auto_refresh:
+            try:
+                self.index_service.refresh_if_stale(str(self.project_root))
+            except Exception as e:
+                logger.warning("Failed to refresh stale index before RCA: %s", e)
+                return self.index_service.get_snapshot(errors=[str(e)])
+        return self.index_service.get_snapshot()
 
     def _normalize_path(self, file_path: str) -> str:
         """Normalize file path from traceback into a project-relative posix path."""
@@ -104,6 +122,7 @@ class RCAService:
 
     def collect_trace_evidence(self, trace: str) -> EvidenceBundle:
         """Parse stack trace and collect evidence deterministically."""
+        snapshot = self._ensure_fresh()
         parsed = None
         for parser in self.parsers:
             if parser.can_parse(trace):
@@ -113,14 +132,16 @@ class RCAService:
         if not parsed:
             return EvidenceBundle(
                 summary="Could not parse stack trace",
-                warnings=["No valid call frames found in the trace."]
+                warnings=["No valid call frames found in the trace."],
+                metadata={"snapshot": snapshot.model_dump(mode="json")},
             )
 
         warnings = list(parsed.warnings)
         if not parsed.frames:
             return EvidenceBundle(
                 summary="No valid frames",
-                warnings=warnings
+                warnings=warnings,
+                metadata={"snapshot": snapshot.model_dump(mode="json")},
             )
 
         proximate_frame = parsed.proximate_frame
@@ -197,7 +218,9 @@ class RCAService:
                 )
             )
 
-        metadata: dict[str, object] = {}
+        evidence_files = sorted({ev.file_path for ev in evidences})
+        snapshot = self.index_service.get_snapshot(evidence_files)
+        metadata: dict[str, object] = {"snapshot": snapshot.model_dump(mode="json")}
         if error_type:
             metadata["error_type"] = error_type
         if proximate_frame:

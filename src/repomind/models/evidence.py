@@ -7,7 +7,7 @@ from typing import Literal, TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from repomind.models.schemas import RCAResult, EvidenceItem
+    from repomind.models.schemas import RCAResult
 
 from repomind.models.schemas import SymbolInfo, SymbolRelation
 
@@ -41,7 +41,7 @@ class EvidenceBundle(BaseModel):
     metadata: dict[str, object] = Field(default_factory=dict)
 
     def to_legacy_result(self) -> "RCAResult":
-        from repomind.models.schemas import RCAResult, EvidenceItem
+        from repomind.models.schemas import RCAResult, EvidenceItem, IndexSnapshot
 
         root_cause = self.summary or "Unknown Error"
         evidences = []
@@ -66,6 +66,13 @@ class EvidenceBundle(BaseModel):
         if evidences:
             confidence = 0.8 if self.symbols else 0.4
 
+        snapshot_data = self.metadata.get("snapshot")
+        snapshot = (
+            IndexSnapshot.model_validate(snapshot_data)
+            if isinstance(snapshot_data, dict)
+            else None
+        )
+
         return RCAResult(
             root_cause=root_cause,
             confidence=confidence,
@@ -75,5 +82,6 @@ class EvidenceBundle(BaseModel):
             suggested_fix=None,
             evidence=[],
             evidences=evidences,
-            verification_command="uv run pytest"
+            verification_command="uv run pytest",
+            snapshot=snapshot,
         )
